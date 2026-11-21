@@ -1,0 +1,16 @@
+# Material pessoal de estudo: fica só na máquina local
+videos/
+aula-*.md
+grava-tela.ps1
+loopback.cs
+Gravar Tela.bat
+
+# Segredos gerados pelos modelos, caso alguém teste aqui
+.env.local
+.env.*.local
+.segredos/
+
+# Sistema
+Thumbs.db
+desktop.ini
+.DS_Store

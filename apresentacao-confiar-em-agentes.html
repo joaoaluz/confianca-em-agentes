@@ -1,0 +1,1449 @@
+<meta charset="utf-8">
+<title>Confiar para Escalar</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: um slide por vez, ocupando a tela; as camadas viram "checks" de um pipeline de CI. */
+:root {
+  --bg: #EDF0F6;
+  --surface: #FFFFFF;
+  --ink: #131A2C;
+  --muted: #586379;
+  --line: #CCD3E0;
+  --accent: #2C47D4;
+  --accent-soft: #DDE3FB;
+  --on-accent: #FFFFFF;
+  --signal: #B86E00;
+  --pass: #1C8048;
+  --fail: #C23535;
+  --code: #E2E7F0;
+
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --t-hero: clamp(2.6rem, 7vw, 5.6rem);
+  --t-h2: clamp(1.9rem, 4.2vw, 3.3rem);
+  --t-h3: clamp(1.1rem, 1.8vw, 1.45rem);
+  --t-body: clamp(1rem, 1.55vw, 1.3rem);
+  --t-small: clamp(.82rem, 1.1vw, .95rem);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D1220; --surface: #151C2E; --ink: #E7EBF4; --muted: #97A1B7; --line: #283149;
+    --accent: #8197FF; --accent-soft: #1F2A52; --on-accent: #0D1220;
+    --signal: #F0B54A; --pass: #4CC38A; --fail: #FF7C7C; --code: #1A2238;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D1220; --surface: #151C2E; --ink: #E7EBF4; --muted: #97A1B7; --line: #283149;
+  --accent: #8197FF; --accent-soft: #1F2A52; --on-accent: #0D1220;
+  --signal: #F0B54A; --pass: #4CC38A; --fail: #FF7C7C; --code: #1A2238;
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: var(--t-body);
+  line-height: 1.5;
+  overflow: hidden;
+}
+*, *::before, *::after { box-sizing: border-box; }
+a { color: var(--accent); text-underline-offset: 3px; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+/* ---------- moldura ---------- */
+.deck { height: 100%; display: grid; grid-template-rows: auto 1fr auto; }
+.bar, .controls {
+  display: flex; align-items: center; gap: 12px;
+  padding-block: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  font-family: var(--f-mono); font-size: var(--t-small); color: var(--muted);
+}
+.bar { border-bottom: 1px solid var(--line); }
+.controls { border-top: 1px solid var(--line); }
+.bar .name { font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.bar .spacer, .controls .spacer { flex: 1; }
+.counter { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.btn {
+  font: inherit; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 14px; cursor: pointer; white-space: nowrap;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:disabled { opacity: .4; cursor: default; border-color: var(--line); }
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.progress { flex: 1; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; min-width: 40px; }
+.progress span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s ease; }
+.hint { white-space: nowrap; }
+@media (max-width: 640px) { .hint { display: none; } }
+
+/* ---------- slides ---------- */
+.stage { position: relative; overflow: hidden; }
+.slide {
+  position: absolute; inset: 0; overflow-y: auto;
+  padding-block: clamp(20px, 4vh, 48px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.slide-inner {
+  max-width: 1120px; min-height: 100%; margin: 0 auto;
+  display: flex; flex-direction: column; justify-content: center; gap: clamp(14px, 2.4vh, 26px);
+}
+.slide.is-current .slide-inner { animation: enter .35s ease both; }
+@keyframes enter { from { transform: translateY(10px); opacity: .6; } to { transform: none; opacity: 1; } }
+
+.eyebrow {
+  font-family: var(--f-mono); font-size: var(--t-small); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.eyebrow .tag { border: 1px solid currentColor; border-radius: 999px; padding: 2px 10px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.05; }
+h1 { font-size: var(--t-hero); font-weight: 800; letter-spacing: -.02em; }
+h2 { font-size: var(--t-h2); font-weight: 700; letter-spacing: -.015em; }
+h3 { font-size: var(--t-h3); font-weight: 700; line-height: 1.2; }
+p { margin: 0; max-width: 62ch; }
+.lead { font-size: clamp(1.1rem, 2vw, 1.6rem); color: var(--muted); max-width: 46ch; }
+.muted { color: var(--muted); }
+mark { background: var(--accent-soft); color: var(--ink); padding: 0 .2em; border-radius: 4px; }
+ul.points { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; max-width: 64ch; }
+ul.points li { padding-left: 1.4em; position: relative; }
+ul.points li::before { content: "›"; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
+
+.src {
+  font-family: var(--f-mono); font-size: var(--t-small); color: var(--muted);
+  display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
+}
+.src a { color: var(--muted); }
+.src a:hover { color: var(--accent); }
+
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: clamp(16px, 3vw, 36px); align-items: start; }
+.cols > * { min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: clamp(16px, 2.2vw, 26px); display: grid; gap: 10px; align-content: start; }
+.panel.bad { border-top: 4px solid var(--fail); }
+.panel.good { border-top: 4px solid var(--pass); }
+.panel .label { font-family: var(--f-mono); font-size: var(--t-small); text-transform: uppercase; letter-spacing: .08em; }
+.panel.bad .label { color: var(--fail); }
+.panel.good .label { color: var(--pass); }
+
+/* ---------- capa ---------- */
+.cover h1 .line2 { color: var(--accent); display: block; }
+.cover .meta { display: flex; flex-wrap: wrap; gap: 10px 26px; font-family: var(--f-mono); font-size: var(--t-small); color: var(--muted); }
+.cover .meta b { color: var(--ink); font-weight: 500; }
+.cover .start { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+/* ---------- pipeline (motivo visual) ---------- */
+.pipeline { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; font-family: var(--f-mono); font-size: clamp(.9rem, 1.35vw, 1.1rem); max-width: 760px; }
+.pipeline .head { display: flex; justify-content: space-between; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); color: var(--muted); flex-wrap: wrap; }
+.check { display: grid; grid-template-columns: 28px 1fr auto; gap: 14px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.check:last-child { border-bottom: 0; }
+.check .ico { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: .85em; font-weight: 700; color: var(--surface); background: var(--pass); }
+.check .ico.fail { background: var(--fail); }
+.check .ico.warn { background: var(--signal); }
+.check .what { min-width: 0; }
+.check .what small { display: block; color: var(--muted); font-size: .82em; }
+.check .when { color: var(--muted); font-size: .85em; white-space: nowrap; }
+@media (prefers-reduced-motion: no-preference) {
+  .slide.is-current .pipeline.animate .ico { animation: tick .5s ease both; }
+  .slide.is-current .pipeline.animate .check:nth-of-type(2) .ico { animation-delay: .35s; }
+  .slide.is-current .pipeline.animate .check:nth-of-type(3) .ico { animation-delay: .7s; }
+  .slide.is-current .pipeline.animate .check:nth-of-type(4) .ico { animation-delay: 1.05s; }
+  .slide.is-current .pipeline.animate .check:nth-of-type(5) .ico { animation-delay: 1.4s; }
+}
+@keyframes tick { from { background: var(--line); transform: scale(.7); } to { transform: none; } }
+
+/* ---------- números ---------- */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 16px; }
+.stat { border-left: 3px solid var(--accent); padding-left: 14px; display: grid; gap: 4px; }
+.stat b { font-family: var(--f-display); font-size: clamp(2rem, 4.4vw, 3.4rem); line-height: 1; font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: var(--t-small); }
+.note { font-size: var(--t-small); color: var(--signal); font-family: var(--f-mono); }
+
+/* ---------- curva ---------- */
+.chart { width: 100%; max-width: 620px; height: auto; }
+.chart .axis { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+.chart .grid { stroke: var(--line); stroke-width: 1; fill: none; }
+.chart .curve { stroke: var(--accent); stroke-width: 4; fill: none; stroke-linecap: round; }
+.chart .area { fill: var(--accent-soft); }
+.chart .pt { fill: var(--surface); stroke: var(--accent); stroke-width: 3; }
+.chart .pt-n { fill: var(--accent); font: 700 15px var(--f-mono); text-anchor: middle; dominant-baseline: central; }
+.chart .ax-label { fill: var(--muted); font: 500 14px var(--f-mono); }
+ol.stages { margin: 0; padding: 0; list-style: none; counter-reset: st; display: grid; gap: 14px; }
+ol.stages li { counter-increment: st; display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; }
+ol.stages li::before {
+  content: counter(st); width: 30px; height: 30px; border-radius: 50%; border: 3px solid var(--accent);
+  display: grid; place-items: center; font: 700 .9rem var(--f-mono); color: var(--accent);
+}
+ol.stages li b { display: block; }
+ol.stages li span { color: var(--muted); font-size: .92em; }
+
+/* ---------- código / arquivos ---------- */
+.file { background: var(--code); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.file .fname { font-family: var(--f-mono); font-size: var(--t-small); color: var(--muted); padding: 8px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.file pre { margin: 0; padding: 14px; overflow-x: auto; font-family: var(--f-mono); font-size: clamp(.8rem, 1.15vw, .98rem); line-height: 1.6; }
+.file .k { color: var(--accent); }
+.file .c { color: var(--muted); font-style: italic; }
+.file .s { color: var(--pass); }
+
+/* ---------- ciclo / passos ---------- */
+.flow { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; }
+.flow .step { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; display: grid; gap: 4px; flex: 1 1 160px; min-width: 0; }
+.flow .step small { font-family: var(--f-mono); font-size: var(--t-small); color: var(--accent); }
+.flow .arrow { align-self: center; color: var(--muted); font-family: var(--f-mono); }
+@media (max-width: 640px) { .flow .arrow { display: none; } }
+
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 14px; counter-reset: sp; }
+.steps > div { counter-increment: sp; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 6px; align-content: start; }
+.steps > div::before { content: "passo " counter(sp); font-family: var(--f-mono); font-size: var(--t-small); color: var(--accent); text-transform: uppercase; letter-spacing: .08em; }
+
+/* ---------- regras duras x moles ---------- */
+.log { font-family: var(--f-mono); font-size: clamp(.82rem, 1.2vw, 1rem); background: var(--code); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 6px; overflow-x: auto; }
+.log .l { white-space: pre-wrap; }
+.log .x { color: var(--fail); font-weight: 500; }
+.log .w { color: var(--signal); font-weight: 500; }
+.log .ok { color: var(--pass); font-weight: 500; }
+
+/* ---------- quadro "no Claude Code" ---------- */
+.cc { border: 1px dashed var(--accent); border-radius: 12px; background: var(--accent-soft); padding: 14px 16px; display: grid; gap: 8px; max-width: 900px; }
+.cc .cc-label { font-family: var(--f-mono); font-size: var(--t-small); text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-weight: 500; }
+.cc p, .cc li { font-size: .92em; }
+.cc ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+.cc pre { margin: 0; background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow-x: auto; font-family: var(--f-mono); font-size: clamp(.76rem, 1.05vw, .9rem); line-height: 1.55; }
+code { font-family: var(--f-mono); font-size: .9em; background: var(--code); border-radius: 4px; padding: 0 .3em; }
+.map { width: 100%; border-collapse: collapse; font-size: .92em; }
+.map th, .map td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.map th { font-family: var(--f-mono); font-size: var(--t-small); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 500; }
+.map td:first-child { font-weight: 600; white-space: nowrap; }
+.map .hard { color: var(--fail); font-family: var(--f-mono); font-size: .85em; }
+.map .soft { color: var(--signal); font-family: var(--f-mono); font-size: .85em; }
+.table-wrap { overflow-x: auto; }
+
+/* ---------- grande frase ---------- */
+.big { font-family: var(--f-display); font-weight: 800; font-size: clamp(2rem, 5vw, 4.2rem); line-height: 1.04; letter-spacing: -.02em; text-wrap: balance; max-width: 20ch; }
+.big em { font-style: normal; color: var(--accent); }
+.choices { display: flex; flex-wrap: wrap; gap: 10px; }
+.choice { font-family: var(--f-mono); font-size: var(--t-small); border: 1px solid var(--accent); color: var(--accent); border-radius: 999px; padding: 6px 14px; }
+
+/* ---------- pirâmide ---------- */
+.pyr { display: grid; gap: 6px; justify-items: center; width: 100%; }
+.pyr > div { width: var(--w, 100%); border-radius: 10px; padding: 12px 16px; display: grid; gap: 2px; text-align: center; min-width: 0; }
+.pyr b { font-family: var(--f-display); font-size: var(--t-h3); line-height: 1.15; }
+.pyr small { font-size: var(--t-small); }
+.pyr .det { background: var(--accent); color: var(--on-accent); }
+.pyr .jul { background: var(--accent-soft); color: var(--ink); border: 1px solid var(--line); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-family: var(--f-mono); font-size: var(--t-small); color: var(--muted); margin: 0; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; border: 1px solid var(--line); }
+.sw.det { background: var(--accent); border-color: var(--accent); }
+.sw.jul, .sw.ok { background: var(--accent-soft); }
+.sw.weed { background: var(--signal); border-color: var(--signal); }
+
+/* ---------- jardim ---------- */
+.garden { display: grid; gap: 10px; align-content: start; }
+.garden .row { display: grid; grid-template-columns: 5.5em 1fr; gap: 12px; align-items: center; }
+.garden .row > span { font-family: var(--f-mono); font-size: var(--t-small); color: var(--muted); }
+.garden .cells { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; }
+.garden .cells i { display: block; aspect-ratio: 1; max-width: 100%; border-radius: 4px; background: var(--accent-soft); border: 1px solid var(--line); }
+.garden .cells i.weed { background: var(--signal); border-color: var(--signal); }
+
+/* ---------- níveis de risco ---------- */
+.tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 14px; }
+.tier { --c: var(--accent); background: var(--surface); border: 1px solid var(--line); border-top: 6px solid var(--c); border-radius: 14px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.tier .tname { font-family: var(--f-mono); font-size: var(--t-small); text-transform: uppercase; letter-spacing: .08em; font-weight: 500; color: var(--c); }
+.tier.verde { --c: var(--pass); }
+.tier.amarelo { --c: var(--signal); }
+.tier.vermelho { --c: var(--fail); }
+
+/* ---------- escada de autonomia ---------- */
+.ladder { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 10px; align-items: end; }
+.ladder li { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.ladder li:last-child { border-color: var(--accent); }
+.ladder .lvn { font-family: var(--f-display); font-weight: 800; font-size: clamp(1.6rem, 3vw, 2.2rem); line-height: 1; color: var(--accent); }
+.ladder .how { font-size: .92em; }
+.ladder .up { font-family: var(--f-mono); font-size: var(--t-small); color: var(--muted); }
+@media (min-width: 1000px) {
+  .ladder { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .ladder li { min-height: calc(170px + var(--n, 0) * 28px); }
+}
+
+.map.wrap td:first-child { white-space: normal; font-weight: 400; }
+.quote { font-family: var(--f-display); font-weight: 700; font-size: clamp(1.3rem, 2.8vw, 2.2rem); line-height: 1.15; max-width: 34ch; text-wrap: balance; border-left: 4px solid var(--accent); padding-left: 16px; margin: 0; }
+
+.map .c0, .map .c1, .map .c2 { font-family: var(--f-mono); font-size: .85em; white-space: nowrap; }
+.map .c0 { color: var(--pass); }
+.map .c1 { color: var(--signal); }
+.map .c2 { color: var(--fail); }
+
+/* ---------- checklist ---------- */
+.todo { display: grid; gap: 12px; max-width: 760px; }
+.todo label { display: grid; grid-template-columns: 28px 1fr; gap: 14px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; cursor: pointer; }
+.todo input { width: 22px; height: 22px; margin: 3px 0 0; accent-color: var(--pass); }
+.todo label:has(input:checked) { border-color: var(--pass); }
+.todo label:has(input:checked) b { text-decoration: line-through; text-decoration-color: var(--pass); }
+.todo b { display: block; }
+.todo span { color: var(--muted); font-size: .92em; }
+
+/* ---------- glossário ---------- */
+.gloss { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px 22px; margin: 0; }
+.gloss div { border-top: 1px solid var(--line); padding-top: 8px; min-width: 0; }
+.gloss dt { font-family: var(--f-mono); font-weight: 500; color: var(--accent); font-size: .95em; }
+.gloss dd { margin: 2px 0 0; color: var(--muted); font-size: .9em; }
+
+ol.qs { margin: 0; padding-left: 1.4em; display: grid; gap: 10px; max-width: 64ch; }
+ol.qs li::marker { color: var(--accent); font-family: var(--f-mono); font-weight: 500; }
+
+/* ---------- índice ---------- */
+.index {
+  position: fixed; inset: 0; z-index: 20; background: var(--bg);
+  overflow-y: auto;
+  padding-block: calc(20px + env(safe-area-inset-top, 0px)) calc(20px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.index-inner { max-width: 900px; margin: 0 auto; display: grid; gap: 16px; }
+.index-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.index ol { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 8px; }
+.index button.go {
+  width: 100%; text-align: left; font: inherit; font-size: var(--t-small); color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer;
+  display: grid; grid-template-columns: 2.2em 1fr; gap: 8px;
+}
+.index button.go span { font-family: var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.index button.go[aria-current="true"] { border-color: var(--accent); }
+.index button.go:hover { border-color: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .slide.is-current .slide-inner { animation: none; }
+  .progress span { transition: none; }
+}
+</style>
+
+<div class="deck">
+  <header class="bar">
+    <span class="name">Confiar para escalar · agentes de IA</span>
+    <span class="spacer"></span>
+    <span class="counter" id="counter">1 / 39</span>
+    <button class="btn" id="btn-index" type="button" aria-haspopup="dialog">Índice</button>
+  </header>
+
+  <main class="stage" id="stage">
+
+    <!-- 1 -->
+    <section class="slide cover" data-title="Capa">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">aula de estudo</span><span>baseada na palestra de Lauren Tan</span></div>
+        <h1>Confiar para escalar<span class="line2">agentes que entregam código que ninguém lê</span></h1>
+        <p class="lead">Como uma engenheira passou de vigiar cada resposta de um agente para deixar dezenas deles fazendo merge sozinhos, o que o estado da arte acrescenta e como levar isso para o Claude Code e o Codex num plano Pro.</p>
+        <div class="meta">
+          <span><b>Fontes:</b> 3 vídeos de Lauren Tan + estado da arte 2025–2026</span>
+          <span><b>Idioma original:</b> inglês</span>
+          <span><b>39</b> slides, com exemplos no Claude Code e no Codex</span>
+        </div>
+        <div class="start">
+          <button class="btn primary" type="button" data-next>Começar →</button>
+          <span class="muted" style="font-size: var(--t-small)">Use ← → no teclado, ou deslize no celular.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2 -->
+    <section class="slide" hidden data-title="Quem é Lauren Tan">
+      <div class="slide-inner">
+        <div class="eyebrow">contexto</div>
+        <h2>Quem está falando</h2>
+        <div class="cols">
+          <ul class="points">
+            <li>Engenheira do time do <b>Grokbot</b> (Cursor e SpaceX AI), um app para orquestrar equipes de agentes. Também conhecida como "Potato".</li>
+            <li>Antes: gerente de engenharia do time do <b>React</b> na Meta e parte do time do React Compiler.</li>
+            <li>Chegou à Cursor 5 meses antes da palestra e, na primeira semana, não entendia o código nem os gráficos de desempenho.</li>
+          </ul>
+          <div class="stats">
+            <div class="stat"><b>~1.000</b><span>PRs no mês anterior</span></div>
+            <div class="stat"><b>~800</b><span>PRs até o dia 12 do mês seguinte</span></div>
+            <div class="stat"><b>20</b><span>PRs mesclados pelos agentes durante uma noite</span></div>
+          </div>
+        </div>
+        <p class="note">! números autodeclarados por ela; servem de ilustração, não de meta.</p>
+        <div class="src"><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=242s" target="_blank" rel="noopener">▶ palestra 4:02</a><a href="https://www.youtube.com/watch?v=O0722w0Xby8&amp;t=33s" target="_blank" rel="noopener">▶ resumo 0:33</a></div>
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section class="slide" hidden data-title="O problema: confiança">
+      <div class="slide-inner">
+        <div class="eyebrow">a tese</div>
+        <h2>O gargalo não é o agente. É a confiança.</h2>
+        <div class="cols">
+          <div class="panel bad">
+            <span class="label">✗ sem confiança</span>
+            <h3>Você vira microgerente</h3>
+            <p>O agente chuta a causa de um bug, afirma com certeza e erra. Você passa a conferir cada resposta, e não consegue usar mais que um ou dois ao mesmo tempo.</p>
+          </div>
+          <div class="panel good">
+            <span class="label">✓ com confiança</span>
+            <h3>Você consegue paralelizar</h3>
+            <p>Ninguém lança cem agentes sem confiar no resultado de um. A confiança é o que libera a escala.</p>
+          </div>
+        </div>
+        <p class="muted">A analogia dela: gerenciar agentes é como gerenciar uma equipe. Sem confiança, você fica olhando por cima do ombro de todo mundo.</p>
+        <div class="src"><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=44s" target="_blank" rel="noopener">▶ palestra 0:44</a></div>
+      </div>
+    </section>
+
+    <!-- 4 -->
+    <section class="slide" hidden data-title="A curva da confiança">
+      <div class="slide-inner">
+        <div class="eyebrow">o caminho</div>
+        <h2>A curva da confiança</h2>
+        <div class="cols">
+          <svg class="chart" viewBox="0 0 620 360" role="img" aria-label="Curva crescente: quanto mais confiança, mais autonomia para os agentes, em quatro estágios">
+            <line class="grid" x1="70" y1="225" x2="600" y2="225"/>
+            <line class="grid" x1="70" y1="150" x2="600" y2="150"/>
+            <line class="grid" x1="70" y1="75" x2="600" y2="75"/>
+            <path class="area" d="M70,290 C270,285 390,220 600,52 L600,300 L70,300 Z" opacity=".55"/>
+            <path class="axis" d="M70,30 L70,300 L605,300"/>
+            <path class="curve" d="M70,290 C270,285 390,220 600,52"/>
+            <circle class="pt" cx="127" cy="287" r="15"/><text class="pt-n" x="127" y="287">1</text>
+            <circle class="pt" cx="282" cy="252" r="15"/><text class="pt-n" x="282" y="252">2</text>
+            <circle class="pt" cx="432" cy="176" r="15"/><text class="pt-n" x="432" y="176">3</text>
+            <circle class="pt" cx="572" cy="76" r="15"/><text class="pt-n" x="572" y="76">4</text>
+            <text class="ax-label" x="605" y="326" text-anchor="end">autonomia dos agentes →</text>
+            <text class="ax-label" x="0" y="0" transform="translate(42 300) rotate(-90)">confiança →</text>
+          </svg>
+          <ol class="stages">
+            <li><div><b>Observar tudo</b><span>1 ou 2 agentes, você lê cada resposta.</span></div></li>
+            <li><div><b>Verificar no seu PC</b><span>O agente testa o que fez; você observa como.</span></div></li>
+            <li><div><b>Escalar na nuvem</b><span>Agentes pegam tarefas sozinhos e devolvem PRs.</span></div></li>
+            <li><div><b>Automerge</b><span>PRs entram sozinhos; você revisa depois, no main.</span></div></li>
+          </ol>
+        </div>
+        <p class="muted">Não existe atalho: pular do estágio 1 para milhares de agentes só queima tokens e dinheiro.</p>
+        <div class="src"><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=121s" target="_blank" rel="noopener">▶ palestra 2:01</a><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=1590s" target="_blank" rel="noopener">▶ 26:30 (o alerta)</a></div>
+      </div>
+    </section>
+
+    <!-- 5 -->
+    <section class="slide" hidden data-title="O novo papel: chef de cozinha">
+      <div class="slide-inner">
+        <div class="eyebrow">analogia</div>
+        <h2>O engenheiro vira chef de cozinha</h2>
+        <div class="cols">
+          <ul class="points">
+            <li>Você <b>não cozinha mais todos os pratos</b>.</li>
+            <li>Você projeta a cozinha: as estações, os utensílios, quem faz o quê.</li>
+            <li>Os cozinheiros (agentes) executam; seu trabalho é o <b>ambiente</b> em que eles trabalham.</li>
+          </ul>
+          <div class="panel">
+            <span class="label muted">pergunta para você</span>
+            <p>Se um cozinheiro novo entrasse hoje na sua "cozinha" (seu projeto), ele saberia onde está cada coisa sem perguntar?</p>
+          </div>
+        </div>
+        <div class="src"><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=1337s" target="_blank" rel="noopener">▶ palestra 22:17</a><a href="https://www.youtube.com/watch?v=O0722w0Xby8&amp;t=105s" target="_blank" rel="noopener">▶ resumo 1:45</a></div>
+      </div>
+    </section>
+
+    <!-- 6 -->
+    <section class="slide" hidden data-title="As 4 camadas">
+      <div class="slide-inner">
+        <div class="eyebrow">mapa da aula</div>
+        <h2>Quatro camadas que constroem confiança</h2>
+        <div class="pipeline animate" role="list" aria-label="As quatro camadas">
+          <div class="head"><span>pipeline: confiança-nos-agentes</span><span>4 checks</span></div>
+          <div class="check" role="listitem"><span class="ico" aria-hidden="true">✓</span><span class="what">verificação<small>o agente roda o app e prova que funciona</small></span><span class="when">camada 1</span></div>
+          <div class="check" role="listitem"><span class="ico" aria-hidden="true">✓</span><span class="what">skills + evals<small>ensinar o agente e medir se aprendeu</small></span><span class="when">camada 2</span></div>
+          <div class="check" role="listitem"><span class="ico" aria-hidden="true">✓</span><span class="what">agentes na nuvem<small>escalar só depois que funciona no seu PC</small></span><span class="when">camada 3</span></div>
+          <div class="check" role="listitem"><span class="ico" aria-hidden="true">✓</span><span class="what">arquitetura com regras duras<small>o código impede o agente de errar</small></span><span class="when">camada 4</span></div>
+        </div>
+        <p class="muted">Este é o modelo do workshop. Na palestra mais recente (próximo slide), ela reorganiza tudo numa pirâmide que começa pelo código.</p>
+        <div class="src"><a href="https://www.youtube.com/watch?v=O0722w0Xby8&amp;t=16s" target="_blank" rel="noopener">▶ resumo 0:16</a></div>
+      </div>
+    </section>
+
+    <!-- 6a: pirâmide (aula 3) -->
+    <section class="slide" hidden data-title="A pirâmide invertida">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">aula 3</span><span>a versão mais recente</span></div>
+        <h2>Onde investir: a pirâmide invertida</h2>
+        <div class="cols">
+          <div style="display:grid; gap:12px">
+            <div class="pyr" role="img" aria-label="Pirâmide invertida: o próprio código no topo, depois checagens e testes, verificação e, por último, texto">
+              <div class="det" style="--w:100%"><b>O próprio código</b><small>design de API, arquitetura, refatoração</small></div>
+              <div class="det" style="--w:86%"><b>Checagens e testes</b><small>lint, tipos, compilador, testes</small></div>
+              <div class="jul" style="--w:70%"><b>Verificação</b><small>em execução e formal</small></div>
+              <div class="jul" style="--w:54%"><b>Texto</b><small>regras, skills, AGENTS.md</small></div>
+            </div>
+            <p class="legend"><span><i class="sw det"></i>determinístico</span><span><i class="sw jul"></i>complementar</span></p>
+          </div>
+          <ul class="points">
+            <li>As duas camadas de cima são <b>determinísticas</b>: dão sempre o mesmo resultado e obrigam o agente a acertar por padrão.</li>
+            <li>A verificação acha bugs e confere se o agente entendeu a <b>intenção</b>.</li>
+            <li>O texto vem por último, para o que exige julgamento.</li>
+          </ul>
+        </div>
+        <p><mark>Corrigiu o agente? Transforme a correção numa checagem determinística</mark> em vez de mais uma linha no arquivo de regras.</p>
+        <div class="src"><a href="https://www.youtube.com/watch?v=O_zcc6Xl12g&amp;t=123s" target="_blank" rel="noopener">▶ aula 3, 2:03</a></div>
+      </div>
+    </section>
+
+    <!-- 6b: jardim (aula 3) -->
+    <section class="slide" hidden data-title="O código é um jardim">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">aula 3</span><span>o código como jardim</span></div>
+        <h2>O agente copia o que vê</h2>
+        <div class="cols">
+          <div style="display:grid; gap:14px">
+            <p>O código é a maior entrada do agente. Uma gambiarra no lugar errado vira "o padrão da casa", e o próximo agente a copia.</p>
+            <p class="muted">Antes ela revisava ~3 PRs por dia; hoje são ~300. Nesse ritmo, a erva daninha se espalha antes de alguém perceber.</p>
+            <p>As regras do código são a fundação de concreto em volta da qual o código novo cresce.</p>
+          </div>
+          <div class="garden" role="img" aria-label="Ilustração: uma gambiarra em 1 arquivo se espalha para 4 arquivos na semana 2 e para 9 no mês 2">
+            <div class="row"><span>1º PR</span><div class="cells"><i></i><i></i><i></i><i></i><i class="weed"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+            <div class="row"><span>semana 2</span><div class="cells"><i></i><i class="weed"></i><i></i><i></i><i class="weed"></i><i class="weed"></i><i></i><i></i><i></i><i class="weed"></i><i></i><i></i></div></div>
+            <div class="row"><span>mês 2</span><div class="cells"><i class="weed"></i><i class="weed"></i><i></i><i class="weed"></i><i class="weed"></i><i class="weed"></i><i></i><i class="weed"></i><i class="weed"></i><i class="weed"></i><i></i><i class="weed"></i></div></div>
+            <p class="legend"><span><i class="sw weed"></i>gambiarra copiada</span><span><i class="sw ok"></i>arquivo limpo</span><span>ilustração</span></p>
+          </div>
+        </div>
+        <div class="cc">
+          <span class="cc-label">no Claude Code</span>
+          <p>Antes de pedir uma funcionalidade numa área com código ruim, peça primeiro a limpeza daquela área. O Claude imita os arquivos vizinhos.</p>
+        </div>
+        <div class="src"><a href="https://www.youtube.com/watch?v=O_zcc6Xl12g&amp;t=207s" target="_blank" rel="noopener">▶ aula 3, 3:27</a></div>
+      </div>
+    </section>
+
+    <!-- 7 -->
+    <section class="slide" hidden data-title="Camada 1: Verificação">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">camada 1</span><span>verificação</span></div>
+        <h2>Se o agente não roda o código, você é o verificador</h2>
+        <div class="cols">
+          <div class="panel bad">
+            <span class="label">✗ você no meio do caminho</span>
+            <p>O agente escreve → você abre o app → tira print → copia o erro do console → cola no chat → espera → repete.</p>
+            <p class="muted">Você é o gargalo. Nada roda em paralelo.</p>
+          </div>
+          <div class="panel good">
+            <span class="label">✓ o agente fecha o ciclo</span>
+            <p>Ele mesmo abre o app, clica, grava traces de CPU, tira snapshots de memória, abre o simulador do iOS.</p>
+            <p class="muted">Usa as mesmas portas que o usuário: navegador, app desktop, celular.</p>
+          </div>
+        </div>
+        <p><mark>Verificação garante código correto.</mark> Não garante código bom, mas é o maior salto de confiança.</p>
+        <div class="cc">
+          <span class="cc-label">no Claude Code</span>
+          <ul>
+            <li>Peça para ele <b>provar</b>, não só escrever: "rode os testes e abra o app para confirmar".</li>
+            <li>Dê olhos a ele com um servidor MCP de navegador: ele clica, lê o console e tira prints sozinho.</li>
+          </ul>
+          <pre>claude mcp add playwright -- npx @playwright/mcp@latest</pre>
+        </div>
+        <div class="src"><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=323s" target="_blank" rel="noopener">▶ palestra 5:23</a><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=408s" target="_blank" rel="noopener">▶ 6:48 (o exemplo real)</a></div>
+      </div>
+    </section>
+
+    <!-- 8 -->
+    <section class="slide" hidden data-title="O mapa de funcionalidades">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">camada 1</span><span>verificação</span></div>
+        <h2>O mapa de funcionalidades</h2>
+        <div class="cols">
+          <div style="display:grid; gap:14px">
+            <p>Ela criou uma skill para o agente controlar o app. Funcionou, mas o agente <b>não conhecia o app</b>: um relato como "o painel da direita está lento" o deixava perdido no código.</p>
+            <p>A solução foi um arquivo ao lado da skill que descreve cada funcionalidade do ponto de vista de quem usa.</p>
+            <p class="muted">Resultado: até um print com "???" vira uma tarefa que o agente consegue reproduzir.</p>
+            <div class="cc">
+              <span class="cc-label">no Claude Code</span>
+              <p>Guarde o mapa dentro da pasta da skill de verificação e cite-o no <code>CLAUDE.md</code>. Para criar o primeiro: "explore o código e escreva um feature-map.md com cada tela, como chegar nela e o seletor".</p>
+            </div>
+          </div>
+          <div class="file">
+            <div class="fname"><span>.claude/skills/verificar-app/feature-map.md</span><span>exemplo ilustrativo</span></div>
+<pre><span class="k">## Barra lateral</span>
+<span class="c">O que é: lista de conversas e projetos</span>
+Como chegar: abre por padrão, à esquerda
+Atalho: <span class="s">Ctrl+B</span> mostra/esconde
+Sub-itens: busca, fixados, arquivados
+Seletor: <span class="s">[data-testid="sidebar"]</span>
+
+<span class="k">## Aba de PRs</span>
+Como chegar: painel direito → "PRs"
+Seletor: <span class="s">[data-testid="pr-tab"]</span></pre>
+          </div>
+        </div>
+        <div class="src"><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=583s" target="_blank" rel="noopener">▶ palestra 9:43</a><a href="https://www.youtube.com/watch?v=O0722w0Xby8&amp;t=159s" target="_blank" rel="noopener">▶ resumo 2:39</a></div>
+      </div>
+    </section>
+
+    <!-- 8a: evidências (aula 3) -->
+    <section class="slide" hidden data-title="A revisão vira evidência">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">camada 1</span><span>verificação · aula 3</span></div>
+        <h2>A revisão de código vira olhar evidências</h2>
+        <div class="choices" aria-label="Tipos de evidência">
+          <span class="choice">vídeo do fluxo</span>
+          <span class="choice">prints</span>
+          <span class="choice">saída dos testes</span>
+          <span class="choice">diagrama de estados</span>
+          <span class="choice">verificação formal</span>
+        </div>
+        <div class="cols">
+          <ul class="points">
+            <li><b>CLI própria na skill:</b> o agente roda sempre o mesmo comando de verificação. Gasta menos tokens, e o comando pode ser testado.</li>
+            <li><b>Verificação formal</b> nas partes críticas: TLA+ para fluxos, Lean para provar algoritmos. Já achou bugs, mas é mais uma camada, não bala de prata.</li>
+            <li><b>Testes por propriedade</b> na interface também já pegaram bugs.</li>
+          </ul>
+          <div class="stats">
+            <div class="stat"><b>~70%</b><span>dos tokens de uma desenvolvedora citada por ela vão para verificação; Lauren diz que com ela é parecido</span></div>
+          </div>
+        </div>
+        <p class="muted">Para ela, é uma era de ouro dos testes: técnicas antigas que eram caras demais ficaram baratas com agentes.</p>
+        <div class="src"><a href="https://www.youtube.com/watch?v=O_zcc6Xl12g&amp;t=580s" target="_blank" rel="noopener">▶ aula 3, 9:40</a><a href="https://www.youtube.com/watch?v=O_zcc6Xl12g&amp;t=650s" target="_blank" rel="noopener">▶ 10:50 (formal)</a><a href="https://www.youtube.com/watch?v=O_zcc6Xl12g&amp;t=711s" target="_blank" rel="noopener">▶ 11:51 (tokens)</a></div>
+      </div>
+    </section>
+
+    <!-- 9 -->
+    <section class="slide" hidden data-title="Camada 2: Skills">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">camada 2</span><span>skills</span></div>
+        <h2>Uma skill treina um funcionário novo brilhante</h2>
+        <p>Imagine alguém que programa muito bem mas entrou na empresa há cinco segundos. Uma <b>skill</b> é o treinamento dele: um arquivo de texto (Markdown) com instruções e conhecimento.</p>
+        <div class="flow" aria-label="Como as skills dela nasceram">
+          <div class="step"><small>observar</small>Ler as ações e o raciocínio do agente</div>
+          <span class="arrow" aria-hidden="true">→</span>
+          <div class="step"><small>flagrar</small>Ele apontou a causa sem abrir os arquivos certos</div>
+          <span class="arrow" aria-hidden="true">→</span>
+          <div class="step"><small>escrever</small>Skill: "leia o código, use subagentes, pare de chutar"</div>
+          <span class="arrow" aria-hidden="true">→</span>
+          <div class="step"><small>repetir</small>Cada falha nova vira mais uma skill</div>
+        </div>
+        <p class="muted">Ela nunca planejou o plugin Pstack: ele cresceu assim, uma falha observada por vez.</p>
+        <div class="cc">
+          <span class="cc-label">no Claude Code</span>
+          <p>Uma skill é uma pasta com um <code>SKILL.md</code>. O Claude carrega sozinho quando a descrição combina com a tarefa, ou você chama com <code>/investigar-bug</code>.</p>
+<pre>---
+name: investigar-bug
+description: Use ao investigar a causa de um bug.
+---
+1. Antes de afirmar uma causa, abra e leia os arquivos envolvidos.
+2. Reproduza o bug (teste ou app) antes de mudar código.
+3. Busca ampla? Use subagentes em paralelo.
+4. Diga o que confirmou e o que ainda é hipótese.</pre>
+        </div>
+        <div class="src"><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=843s" target="_blank" rel="noopener">▶ palestra 14:03</a><a href="https://www.youtube.com/watch?v=O0722w0Xby8&amp;t=209s" target="_blank" rel="noopener">▶ resumo 3:29</a></div>
+      </div>
+    </section>
+
+    <!-- 10 -->
+    <section class="slide" hidden data-title="Evals: teste para agentes">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">camada 2</span><span>evals</span></div>
+        <h2>Eval: um teste unitário para o agente</h2>
+        <div class="steps">
+          <div><h3>Rubrica</h3><p class="muted">Um agente coordenador escreve os critérios do que a skill deve fazer.</p></div>
+          <div><h3>Subagentes "cegos"</h3><p class="muted">Cada um roda a tarefa numa pasta com nome neutro. Agentes que percebem que estão sendo testados mudam de comportamento.</p></div>
+          <div><h3>Juiz de outro modelo</h3><p class="muted">Um modelo diferente dá a nota, para não haver viés.</p></div>
+          <div><h3>Loop até 10/10</h3><p class="muted">Repete ajustando a skill até a nota máxima ("hill climbing").</p></div>
+        </div>
+        <p class="muted">Bônus: rodar o mesmo eval em vários modelos mostra onde a skill aguenta e onde quebra.</p>
+        <div class="cc">
+          <span class="cc-label">no Claude Code</span>
+          <p>O modo sem interface (<code>claude -p</code>) roda uma tarefa e devolve o resultado, então dá para montar o eval num script: várias execuções com um modelo e a nota com outro.</p>
+<pre>claude -p "Use a skill investigar-bug no caso da pasta caso-07" --model sonnet &gt; run-07.txt
+claude -p "Dê nota de 0 a 10 para run-07.txt segundo rubrica.md" --model opus</pre>
+        </div>
+        <div class="src"><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=1048s" target="_blank" rel="noopener">▶ palestra 17:28</a><a href="https://www.youtube.com/watch?v=O0722w0Xby8&amp;t=241s" target="_blank" rel="noopener">▶ resumo 4:01</a></div>
+      </div>
+    </section>
+
+    <!-- 11 -->
+    <section class="slide" hidden data-title="Camada 3: Nuvem">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">camada 3</span><span>agentes na nuvem</span></div>
+        <h2>Escalar só depois que funciona no seu PC</h2>
+        <p>No seu computador você <b>vê</b> o agente usar o app, passo a passo. Na nuvem, as mesmas skills trabalham para o time inteiro.</p>
+        <div class="flow" aria-label="Como o agente Benny trabalha">
+          <div class="step"><small>entrada</small>Chega um relato de bug</div>
+          <span class="arrow" aria-hidden="true">→</span>
+          <div class="step"><small>Benny</small>Sobe uma máquina na nuvem com o app</div>
+          <span class="arrow" aria-hidden="true">→</span>
+          <div class="step"><small>verifica</small>Usa as skills da camada 1 para reproduzir</div>
+          <span class="arrow" aria-hidden="true">→</span>
+          <div class="step"><small>resposta</small>"Reproduzi, mas já está corrigido no main"</div>
+        </div>
+        <p class="muted">Ordem: verificar local → escalar na nuvem → automerge com revisão depois.</p>
+        <div class="cc">
+          <span class="cc-label">no Claude Code</span>
+          <ul>
+            <li><b>Claude Code na web</b> (claude.ai/code): sessões que rodam na nuvem, em paralelo, e devolvem um branch ou PR.</li>
+            <li><b>GitHub Actions</b>: depois de <code>/install-github-app</code>, mencionar <code>@claude</code> numa issue faz ele investigar e abrir um PR. Um "Benny" próprio.</li>
+            <li>As skills e o <code>CLAUDE.md</code> do repositório vão junto, por isso vale acertá-los no seu PC primeiro.</li>
+          </ul>
+        </div>
+        <div class="src"><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=1426s" target="_blank" rel="noopener">▶ palestra 23:46</a><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=1509s" target="_blank" rel="noopener">▶ 25:09 (Benny)</a></div>
+      </div>
+    </section>
+
+    <!-- 12 -->
+    <section class="slide" hidden data-title="Camada 4: Arquitetura">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">camada 4</span><span>arquitetura</span></div>
+        <h2>Agentes sempre pegam o atalho</h2>
+        <div class="cols">
+          <div class="panel good">
+            <span class="label">✓ empresa grande</span>
+            <p>Já tem trilhos pensados para o engenheiro menos experiente: convenções, frameworks, acessos restritos para o estagiário não apagar o banco de produção.</p>
+            <p class="muted">Os agentes trabalham bem dentro desses trilhos.</p>
+          </div>
+          <div class="panel bad">
+            <span class="label">✗ app novo no improviso</span>
+            <p>Feito com "vibe coding", sem regras. O agente resolve cada tarefa do jeito mais cômodo, e o código vira uma "arquitetura orgânica" que ninguém entende.</p>
+          </div>
+        </div>
+        <p>A resposta dela: refazer o Grokbot em cima de um framework chamado <b>Dune</b>, em <mark>mais de 600 PRs</mark>. Hoje ela quase não lê o código.</p>
+        <div class="src"><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=1772s" target="_blank" rel="noopener">▶ palestra 29:32</a><a href="https://www.youtube.com/watch?v=O0722w0Xby8&amp;t=326s" target="_blank" rel="noopener">▶ resumo 5:26</a></div>
+      </div>
+    </section>
+
+    <!-- 13 -->
+    <section class="slide" hidden data-title="As regras do Dune">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">camada 4</span><span>arquitetura</span></div>
+        <h2>"O caminho mais curto deve ser o melhor caminho"</h2>
+        <div class="cols">
+          <div class="panel">
+            <h3>Tudo junto</h3>
+            <p class="muted">Cada funcionalidade mora numa pasta só. Em 80% das tarefas o agente nem sai dela.</p>
+          </div>
+          <div class="panel">
+            <h3>Armadilhas proibidas</h3>
+            <p class="muted"><code>useEffect</code> do React e comentários no código são barrados pelo CI. Os agentes escreviam comentários com "regras" que ela nunca deu.</p>
+          </div>
+          <div class="panel">
+            <h3>Fronteiras checadas</h3>
+            <p class="muted">Cada quadro da tela tem 16 ms. O CI confere os imports para código pesado não ir parar na parte que desenha a interface.</p>
+          </div>
+        </div>
+        <p class="muted">Mais um hábito: PRs pequenos e atômicos. O histórico vira contexto, e desfazer um erro fica fácil.</p>
+        <div class="src"><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=2281s" target="_blank" rel="noopener">▶ palestra 38:01</a><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=2622s" target="_blank" rel="noopener">▶ 43:42 (o princípio)</a></div>
+      </div>
+    </section>
+
+    <!-- 13a: comentários x lint (aula 3) -->
+    <section class="slide" hidden data-title="Comentário é desculpa, lint é regra">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">camada 4</span><span>arquitetura · aula 3</span></div>
+        <h2>Comentário é desculpa. Lint é regra.</h2>
+        <div class="cols">
+          <div class="file">
+            <div class="fname"><span>antes: o agente se justifica</span><span>ilustrativo</span></div>
+<pre><span class="c">// setTimeout necessário porque o estado</span>
+<span class="c">// ainda não foi atualizado neste ciclo</span>
+setTimeout(() =&gt; abrirPainel(), 0);</pre>
+          </div>
+          <div class="log" aria-label="Erro de lint escrito para o agente">
+            <span class="l"><span class="x">✗ lint</span> setTimeout não é permitido em componentes.</span>
+            <span class="l">  Costuma esconder um problema de estado: corrija</span>
+            <span class="l">  a causa com &lt;padrão do projeto&gt;, não com um timer.</span>
+          </div>
+        </div>
+        <ul class="points">
+          <li>Na Cursor, timers usados como remendo se espalharam, cada um com um comentário justificando, e o app ficou lento.</li>
+          <li>No Grokbot, 99% dos comentários são proibidos: ficam velhos, ninguém lê e não dá para obrigar ninguém a segui-los.</li>
+          <li>A mensagem de erro é escrita <b>para o agente</b>: aparece no momento exato do erro e manda corrigir a causa.</li>
+        </ul>
+        <div class="src"><a href="https://www.youtube.com/watch?v=O_zcc6Xl12g&amp;t=416s" target="_blank" rel="noopener">▶ aula 3, 6:56</a><a href="https://www.youtube.com/watch?v=O_zcc6Xl12g&amp;t=532s" target="_blank" rel="noopener">▶ 8:52 (mensagens de lint)</a></div>
+      </div>
+    </section>
+
+    <!-- 14 -->
+    <section class="slide" hidden data-title="Regras duras × moles">
+      <div class="slide-inner">
+        <div class="eyebrow">a ideia que amarra tudo</div>
+        <h2>Regras duras quebram o build. Regras moles, o agente esquece.</h2>
+        <div class="cols">
+          <div style="display:grid; gap:10px">
+            <h3 style="color: var(--fail)">Duras</h3>
+            <div class="log" aria-label="Exemplo de saída de CI">
+              <span class="l"><span class="x">✗ lint</span>  useEffect não é permitido</span>
+              <span class="l"><span class="x">✗ imports</span> renderer importou main/</span>
+              <span class="l"><span class="x">✗ build</span>  erro do compilador</span>
+              <span class="l"><span class="x">CI vermelho:</span> o PR não entra</span>
+            </div>
+            <p class="muted">CI, lint, compilador. Linguagens rígidas, como Rust, ajudam.</p>
+          </div>
+          <div style="display:grid; gap:10px">
+            <h3 style="color: var(--signal)">Moles</h3>
+            <div class="log" aria-label="Exemplo de regras moles">
+              <span class="l"><span class="w">! skill</span>   "prefira PRs pequenos"</span>
+              <span class="l"><span class="w">! regra</span>   AGENTS.md, guia de estilo</span>
+              <span class="l"><span class="w">! bot</span>     revisor automático comenta</span>
+              <span class="l"><span class="ok">CI verde:</span> o PR entra mesmo assim</span>
+            </div>
+            <p class="muted">Úteis, mas sozinhas "é questão de tempo" até o código virar lixo.</p>
+          </div>
+        </div>
+        <div class="cc">
+          <span class="cc-label">no Claude Code</span>
+          <p><code>CLAUDE.md</code> e skills são regras <b>moles</b>. Os <b>hooks</b> são duros: rodam a cada edição, e com código de saída 2 o erro volta para o Claude, que precisa corrigir antes de seguir.</p>
+<pre>// .claude/settings.json
+{ "hooks": { "PostToolUse": [ {
+    "matcher": "Edit|Write",
+    "hooks": [ { "type": "command",
+                 "command": "npx eslint . &gt;&amp;2 || exit 2" } ]
+} ] } }</pre>
+        </div>
+        <div class="src"><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=2668s" target="_blank" rel="noopener">▶ palestra 44:28</a><a href="https://www.youtube.com/watch?v=O0722w0Xby8&amp;t=453s" target="_blank" rel="noopener">▶ resumo 7:33</a></div>
+      </div>
+    </section>
+
+    <!-- 15 -->
+    <section class="slide" hidden data-title="A pergunta-chave">
+      <div class="slide-inner">
+        <div class="eyebrow">leve isto para casa</div>
+        <p class="big">Escreveu o mesmo comentário de revisão <em>duas vezes?</em> Ele devia ser uma regra.</p>
+        <div class="choices" aria-label="Opções">
+          <span class="choice">vira regra de lint?</span>
+          <span class="choice">vira falha no CI?</span>
+          <span class="choice">dá para eliminar o problema de vez?</span>
+        </div>
+        <p class="muted">O pior lugar para estar, segundo ela: depender de pessoas lendo código para garantir as regras do projeto.</p>
+        <p class="muted">No Claude Code, o mesmo vale para o chat: se você corrige o Claude sempre na mesma coisa, mover isso para o <code>CLAUDE.md</code> já ajuda; transformar em lint ou hook resolve.</p>
+        <div class="src"><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=2804s" target="_blank" rel="noopener">▶ palestra 46:44</a><a href="https://www.youtube.com/watch?v=O0722w0Xby8&amp;t=493s" target="_blank" rel="noopener">▶ resumo 8:13</a></div>
+      </div>
+    </section>
+
+    <!-- 15a: resultado (aula 3) -->
+    <section class="slide" hidden data-title="O resultado: 11.000 PRs">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">aula 3</span><span>o que o investimento rendeu</span></div>
+        <h2>O resultado no time do Grokbot</h2>
+        <div class="stats">
+          <div class="stat"><b>11.000</b><span>PRs em produção num mês</span></div>
+          <div class="stat"><b>~0,5%</b><span>dos PRs revertidos, estável</span></div>
+          <div class="stat"><b>1</b><span>versão estável nova por dia</span></div>
+          <div class="stat"><b>227</b><span>pessoas contribuíram em outubro</span></div>
+        </div>
+        <p>E o desempenho do app <b>melhorou</b>: abrir, digitar e trocar de conversa ficaram mais rápidos, mesmo com esse volume.</p>
+        <p class="quote">"Se o seu ciclo interno produz slop, automatizá-lo só produz mais slop."</p>
+        <p class="note">! números do time dela, apresentados por ela: referência do que é possível, não meta.</p>
+        <div class="src"><a href="https://www.youtube.com/watch?v=O_zcc6Xl12g&amp;t=812s" target="_blank" rel="noopener">▶ aula 3, 13:32</a><a href="https://www.youtube.com/watch?v=O_zcc6Xl12g&amp;t=911s" target="_blank" rel="noopener">▶ 15:11 (fundação antes da fábrica)</a></div>
+      </div>
+    </section>
+
+    <!-- 16 -->
+    <section class="slide" hidden data-title="E o custo?">
+      <div class="slide-inner">
+        <div class="eyebrow">realidade</div>
+        <h2>E quem não tem tokens ilimitados?</h2>
+        <div class="cols">
+          <ul class="points">
+            <li>Ela admite: trabalha num laboratório de IA, com tokens ilimitados.</li>
+            <li>O argumento dela é de <b>retorno</b>: gasta-se muito uma vez (refatorar, criar regras) e depois até modelos menores e baratos escrevem bom código.</li>
+            <li>Sozinha, sem agentes, esse trabalho levaria anos.</li>
+          </ul>
+          <div class="panel good">
+            <span class="label">✓ quem mais ganha</span>
+            <p>Com regras fortes, <b>designers e PMs</b> conseguem corrigir bugs e entregar funcionalidades com segurança. Ela só revisa e aprova.</p>
+          </div>
+        </div>
+        <p class="note">! a conta inicial é real. Comece pequeno (veja "Para segunda-feira").</p>
+        <div class="src"><a href="https://www.youtube.com/watch?v=I_oMJk6barY&amp;t=2880s" target="_blank" rel="noopener">▶ palestra 48:00</a><a href="https://www.youtube.com/watch?v=O0722w0Xby8&amp;t=505s" target="_blank" rel="noopener">▶ resumo 8:25</a></div>
+      </div>
+    </section>
+
+    <!-- E1: estado da arte -->
+    <section class="slide" hidden data-title="Revisão por exceção">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">estado da arte</span><span>além da Lauren</span></div>
+        <h2>O objetivo realista: revisão por exceção</h2>
+        <p class="lead">Nenhuma fonte séria propõe que ninguém olhe nada. O que muda é <b>onde</b> fica a sua atenção.</p>
+        <div class="table-wrap">
+          <table class="map wrap">
+            <thead><tr><th>Você passa a revisar</th><th>Em vez de</th></tr></thead>
+            <tbody>
+              <tr><td>A <b>intenção</b>: specs, critérios de aceite, cenários holdout</td><td>O código linha por linha</td></tr>
+              <tr><td>As <b>evidências</b> dos PRs amarelos</td><td>O diff inteiro</td></tr>
+              <tr><td>O <b>código</b> só dos PRs vermelhos</td><td>Tudo, com o mesmo peso</td></tr>
+              <tr><td>O <b>sistema</b>: falhas viram regras, métricas decidem a autonomia</td><td>Os mesmos erros, toda semana</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="src"><a href="https://arxiv.org/abs/2606.13175" target="_blank" rel="noopener">↗ Monperrus, jun/2026</a><a href="https://www.augmentcode.com/guides/agentic-code-review-authority-boundaries" target="_blank" rel="noopener">↗ Augment, set/2026</a></div>
+      </div>
+    </section>
+
+    <!-- E2 -->
+    <section class="slide" hidden data-title="O sistema completo">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">estado da arte</span><span>o fluxo de uma mudança</span></div>
+        <h2>O sistema completo</h2>
+        <div class="flow" aria-label="Fluxo de uma mudança">
+          <div class="step"><small>você</small>Aprova a spec e os critérios de aceite</div>
+          <span class="arrow" aria-hidden="true">→</span>
+          <div class="step"><small>agente, contido</small>Implementa com sandbox, permissões e arquivos protegidos</div>
+          <span class="arrow" aria-hidden="true">→</span>
+          <div class="step"><small>barreiras</small>Lint, tipos, testes, holdouts, mutação</div>
+          <span class="arrow" aria-hidden="true">→</span>
+          <div class="step"><small>avaliador</small>Outro agente, cético, confere contra a spec</div>
+          <span class="arrow" aria-hidden="true">→</span>
+          <div class="step"><small>classificador</small>Decide o nível de risco do PR</div>
+        </div>
+        <div class="tiers">
+          <div class="tier verde"><span class="tname">verde</span><p>Merge automático</p></div>
+          <div class="tier amarelo"><span class="tname">amarelo</span><p>Você olha as evidências</p></div>
+          <div class="tier vermelho"><span class="tname">vermelho</span><p>Você revisa o código</p></div>
+        </div>
+        <p class="muted">Depois do merge: feature flags, monitoramento por versão e reversão em um comando. As métricas promovem ou rebaixam a autonomia de cada tipo de mudança.</p>
+        <div class="src"><span>playbook implantar-confianca.md, fases 1 a 10</span></div>
+      </div>
+    </section>
+
+    <!-- E3 -->
+    <section class="slide" hidden data-title="Testes à prova de trapaça">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">estado da arte</span><span>testes</span></div>
+        <h2>Testes que o agente não consegue trapacear</h2>
+        <p>Agentes às vezes fazem o teste passar em vez de fazer o código funcionar, e pesquisas de 2026 relatam isso até quando eles são instruídos a não fazer. A defesa tem que ser mecânica.</p>
+        <div class="table-wrap">
+          <table class="map wrap">
+            <thead><tr><th>Técnica</th><th>Que trapaça ela impede</th></tr></thead>
+            <tbody>
+              <tr><td>Testes de aceitação escritos primeiro e protegidos por hook</td><td>Apagar ou afrouxar o teste para passar</td></tr>
+              <tr><td>Cenários <b>holdout</b> fora do repositório (StrongDM)</td><td>Otimizar para os testes que o agente consegue ver</td></tr>
+              <tr><td>Testes de mutação nos arquivos alterados (Meta)</td><td>Testes que passam, mas não pegam nada</td></tr>
+              <tr><td>Testes de propriedade</td><td>Tratar só os casos que estão no teste</td></tr>
+              <tr><td>Sinais no CI: <code>skip</code>, teste apagado, cobertura em queda</td><td>Esconder a trapaça num PR grande</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="src"><a href="https://factory.strongdm.ai/" target="_blank" rel="noopener">↗ StrongDM</a><a href="https://arxiv.org/abs/2501.12862" target="_blank" rel="noopener">↗ Meta</a><a href="https://arxiv.org/abs/2606.07379" target="_blank" rel="noopener">↗ trapaça em agentes</a><a href="https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents" target="_blank" rel="noopener">↗ Anthropic</a></div>
+      </div>
+    </section>
+
+    <!-- E4 -->
+    <section class="slide" hidden data-title="O avaliador independente">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">estado da arte</span><span>julgamento independente</span></div>
+        <h2>Quem faz não deve ser quem julga</h2>
+        <div class="cols">
+          <ul class="points">
+            <li>Agentes tendem a elogiar o próprio trabalho. A Anthropic achou mais fácil calibrar um <b>avaliador cético</b> do que tornar o gerador autocrítico.</li>
+            <li>De preferência <b>outro modelo</b>: vieses diferentes pegam erros diferentes.</li>
+            <li><b>Limite duro</b> por critério da spec: um falhou, reprovou.</li>
+            <li><b>Calibrado com exemplos seus</b> até concordar com você.</li>
+            <li>Nunca a única barreira: revisores de IA têm pontos cegos em comum com o autor.</li>
+          </ul>
+          <div class="file">
+            <div class="fname"><span>veredito do avaliador</span><span>exemplo</span></div>
+<pre>{
+  <span class="k">"veredito"</span>: <span class="s">"reprovado"</span>,
+  <span class="k">"criterios"</span>: [
+    { "id": "C1", "ok": true },
+    { "id": "C2", "ok": false,
+      "evidencia": "erro no console ao salvar" }
+  ],
+  <span class="k">"confianca"</span>: <span class="s">"alta"</span>
+}</pre>
+          </div>
+        </div>
+        <div class="cc">
+          <span class="cc-label">no Claude Code</span>
+          <p>Um subagente em <code>.claude/agents/avaliador.md</code>, que só lê e executa, mais <code>/code-review</code> e <code>/security-review</code>. No CI, ele roda de forma independente, nunca na máquina de quem escreveu.</p>
+        </div>
+        <div class="src"><a href="https://www.anthropic.com/engineering/harness-design-long-running-apps" target="_blank" rel="noopener">↗ Anthropic, mar/2026</a><a href="https://code.claude.com/docs/en/code-review" target="_blank" rel="noopener">↗ Code Review</a></div>
+      </div>
+    </section>
+
+    <!-- E5 -->
+    <section class="slide" hidden data-title="Política de risco">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">estado da arte</span><span>quem olha o quê</span></div>
+        <h2>Cada PR recebe um nível de risco</h2>
+        <div class="tiers">
+          <div class="tier verde"><span class="tname">verde</span><h3>Entra sozinho</h3><p class="muted">Nada sensível, PR pequeno, nenhum sinal de alerta e todas as barreiras passando.</p></div>
+          <div class="tier amarelo"><span class="tname">amarelo</span><h3>Você olha as evidências</h3><p class="muted">Código compartilhado, dependência nova, testes existentes alterados ou PR grande.</p></div>
+          <div class="tier vermelho"><span class="tname">vermelho</span><h3>Você revisa o código</h3><p class="muted">Auth, pagamentos, dados pessoais, migrações, CI, teste de aceitação alterado, ou o agente declarou confiança baixa.</p></div>
+        </div>
+        <div class="panel">
+          <span class="label muted">modo sombra primeiro</span>
+          <p>Nos primeiros 20 a 30 PRs, o classificador e o avaliador trabalham, mas você revisa tudo e anota onde discordou deles. Só depois o verde passa a entrar sozinho.</p>
+        </div>
+        <div class="src"><a href="https://www.augmentcode.com/guides/agentic-code-review-authority-boundaries" target="_blank" rel="noopener">↗ Augment, set/2026</a></div>
+      </div>
+    </section>
+
+    <!-- E6 -->
+    <section class="slide" hidden data-title="A escada de autonomia">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">estado da arte</span><span>autonomia conquistada</span></div>
+        <h2>A escada de autonomia</h2>
+        <ol class="ladder">
+          <li style="--n:0"><span class="lvn">0</span><b>Você lê tudo</b><span class="how">Como hoje.</span><span class="up">Sobe com: linha de base medida.</span></li>
+          <li style="--n:1"><span class="lvn">1</span><b>O agente prova</b><span class="how">Você lê o código e as evidências.</span><span class="up">Sobe com: 10 tarefas provadas sem você colar nada.</span></li>
+          <li style="--n:2"><span class="lvn">2</span><b>Revisão por evidências</b><span class="how">Código só no vermelho.</span><span class="up">Sobe com: avaliador concordando com você em ~20 PRs.</span></li>
+          <li style="--n:3"><span class="lvn">3</span><b>Verde automático</b><span class="how">O verde entra sozinho.</span><span class="up">Sobe com: modo sombra sem escapes e reversões ≤ base.</span></li>
+          <li style="--n:4"><span class="lvn">4</span><b>Fábrica</b><span class="how">Agentes agendados abrem PRs.</span><span class="up">Mantém com: métricas estáveis; incidente rebaixa.</span></li>
+        </ol>
+        <p class="muted">A escada também desce: incidente rebaixa, e trocar de modelo recomeça o modo sombra. O merge automático não é obrigatório; o nível 2 já devolve a maior parte do seu tempo.</p>
+        <div class="src"><span>guia-de-construcao.md, seção 7</span></div>
+      </div>
+    </section>
+
+    <!-- E7 -->
+    <section class="slide" hidden data-title="Onde as fontes divergem">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">estado da arte</span><span>leitura crítica</span></div>
+        <h2>Onde as fontes divergem</h2>
+        <div class="cols">
+          <div class="panel">
+            <span class="label muted">ninguém revisa código</span>
+            <h3>StrongDM e OpenAI</h3>
+            <p class="muted">A StrongDM proíbe humanos de escrever ou revisar código e gasta cerca de US$ 1.000 por engenheiro por dia em tokens. A OpenAI fez ~1 milhão de linhas sem código escrito à mão, mas avisa que barreiras tão mínimas seriam irresponsáveis num ambiente de pouco volume.</p>
+          </div>
+          <div class="panel">
+            <span class="label muted">humano no alto risco</span>
+            <h3>Augment, Monperrus, DORA</h3>
+            <p class="muted">Autonomia por tipo de mudança, promovida quando reversões e incidentes ficam abaixo da base humana. Humanos continuam no alto risco, em arquitetura nova e em código regulado. E a IA amplifica o que já existe, bom ou ruim.</p>
+          </div>
+        </div>
+        <p><mark>O caminho do playbook:</mark> autonomia por tipo de mudança, medida e reversível.</p>
+        <div class="src"><a href="https://factory.strongdm.ai/" target="_blank" rel="noopener">↗ StrongDM</a><a href="https://openai.com/index/harness-engineering/" target="_blank" rel="noopener">↗ OpenAI</a><a href="https://simonwillison.net/2026/Feb/7/software-factory/" target="_blank" rel="noopener">↗ Simon Willison</a><a href="https://dora.dev/dora-report-2025/" target="_blank" rel="noopener">↗ DORA 2025</a></div>
+      </div>
+    </section>
+
+    <!-- P0: perfis de projeto -->
+    <section class="slide" hidden data-title="Serve para todo projeto?">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">na prática</span><span>perfis de projeto</span></div>
+        <h2>Serve para todo projeto? Não, e nem deveria</h2>
+        <div class="choices" aria-label="As três perguntas que decidem">
+          <span class="choice">quanto tempo o código vai viver?</span>
+          <span class="choice">quanto custa um erro que escapa?</span>
+          <span class="choice">quantas mudanças por semana?</span>
+        </div>
+        <div class="table-wrap">
+          <table class="map wrap">
+            <thead><tr><th>Perfil</th><th>O que usar</th><th>Teto de autonomia</th></tr></thead>
+            <tbody>
+              <tr><td>Protótipo, script descartável</td><td>Só o mínimo</td><td>você testa na mão</td></tr>
+              <tr><td>Projeto pessoal pequeno</td><td>Fases 0 a 3 e verificação simples</td><td>nível 1 ou 2</td></tr>
+              <tr><td>Produto com usuários</td><td>Todas as fases, aos poucos</td><td>nível 3</td></tr>
+              <tr><td>Regulado (saúde, pagamentos, LGPD) ou de segurança</td><td>Todas, com o código sensível sempre vermelho</td><td>nível 2</td></tr>
+              <tr><td>Infra, migrações, dados irreversíveis</td><td>Fases 0 a 2, 5 e 6 com staging, e 8</td><td>nível 2</td></tr>
+              <tr><td>Biblioteca ou API pública</td><td>Todas, mais testes de contrato</td><td>nível 2 ou 3</td></tr>
+              <tr><td>Hardware, robótica, embarcados</td><td>Fases 0 a 3, com simulador</td><td>nível 1 ou 2</td></tr>
+              <tr><td>Código legado sem testes</td><td>Fases 0 a 2 e testes do comportamento atual</td><td>nível 1</td></tr>
+              <tr><td>App com IA (ex.: chatbot)</td><td>Todas, mais os testes de conversa</td><td>nível 2 ou 3</td></tr>
+              <tr><td>App mobile (ex.: React Native)</td><td>Todas, com o Maestro no aparelho</td><td>nível 2 ou 3 no merge; publicar na loja fica com humano</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="muted">O mínimo, em qualquer perfil: agente sem credenciais de produção, prova de que funciona, lint, tipos e testes automáticos, correção repetida virando regra e PRs pequenos. Com mais de um perfil, valem as restrições mais fortes.</p>
+        <div class="src"><span>playbook implantar-confianca.md, Fase 0, item 12</span></div>
+      </div>
+    </section>
+
+    <!-- P1: na prática -->
+    <section class="slide" hidden data-title="Economia de tokens">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">na prática</span><span>plano Pro, não laboratório</span></div>
+        <h2>Sem US$ 1.000 por dia: onde vai o seu limite</h2>
+        <p class="lead">Nos planos Pro você não paga por token: tem limites por janela de 5 horas. O jogo é gastar o limite só onde a IA é insubstituível.</p>
+        <div class="table-wrap">
+          <table class="map wrap">
+            <thead><tr><th>Onde vai o consumo</th><th>Custo</th><th>Como economizar</th></tr></thead>
+            <tbody>
+              <tr><td>Lint, tipos, testes, CI, mutação, holdouts</td><td class="c0">zero</td><td>Coloque aqui o máximo de garantia</td></tr>
+              <tr><td>Contexto fixo: <code>AGENTS.md</code>, <code>CLAUDE.md</code>, MCPs, skills</td><td class="c1">toda mensagem</td><td>Mapa curto, MCPs desligados, <code>/context</code> para ver o que pesa</td></tr>
+              <tr><td>Exploração e verificação feitas pelo agente</td><td class="c2">alto</td><td><code>scripts/verificar</code> em vez de navegar e tirar prints</td></tr>
+              <tr><td>Avaliador e revisão por IA</td><td class="c1">médio, por PR</td><td>Só no amarelo e no vermelho</td></tr>
+              <tr><td>Evals e juiz com o modelo real</td><td class="c2">alto, ocasional</td><td>Só quando mudar skill, prompt ou modelo</td></tr>
+              <tr><td>Agentes agendados</td><td class="c1">contínuo</td><td>No máximo um, semanal, com modelo barato</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="muted">Hábitos: uma tarefa por sessão, <code>/clear</code> entre tarefas e o modelo mais forte só para planejar e julgar. Acompanhe com <code>/usage</code> (Claude Code) e <code>/status</code> (Codex).</p>
+        <div class="src"><a href="https://code.claude.com/docs/en/costs" target="_blank" rel="noopener">↗ Claude Code: custos e uso</a><a href="https://developers.openai.com/codex/pricing" target="_blank" rel="noopener">↗ Codex: preços e limites</a></div>
+      </div>
+    </section>
+
+    <!-- P2 -->
+    <section class="slide" hidden data-title="Dois agentes: Claude Code + Codex">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">na prática</span><span>dois planos, um projeto</span></div>
+        <h2>Claude Code + Codex: um revisa o outro</h2>
+        <div class="cols">
+          <div class="table-wrap">
+            <table class="map wrap">
+              <thead><tr><th>Papel</th><th>Sugestão inicial</th></tr></thead>
+              <tbody>
+                <tr><td>Spec, plano e tarefas</td><td>Claude Code, com o Spec Kit</td></tr>
+                <tr><td>Implementar tarefas bem especificadas</td><td>Quem tiver limite disponível, em paralelo</td></tr>
+                <tr><td>Revisar</td><td>Sempre o agente que <b>não</b> escreveu</td></tr>
+                <tr><td>Barreiras duras</td><td>O repositório: lint, testes, pre-commit, CI</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <ul class="points">
+            <li><b>Uma fonte de verdade:</b> <code>AGENTS.md</code> é o mapa; o <code>CLAUDE.md</code> importa com <code>@AGENTS.md</code>.</li>
+            <li><b>Regras no repositório:</b> hooks do Claude não valem para o Codex; pre-commit e CI valem para os dois.</li>
+            <li><b>Sem colisão:</b> quadro de tarefas com dono e um branch ou worktree por agente.</li>
+            <li><b>Métricas por agente:</b> em algumas semanas, os números dizem quem rende mais em cada tipo de tarefa.</li>
+          </ul>
+        </div>
+        <p><mark>Modelos de famílias diferentes</mark> são o "avaliador de outro modelo" do estado da arte, já incluído nos dois planos. E quando um esgota a janela de 5 horas, o outro continua.</p>
+      </div>
+    </section>
+
+    <!-- P3 -->
+    <section class="slide" hidden data-title="O plugin codex-plugin-cc">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">na prática</span><span>o Codex dentro do Claude Code</span></div>
+        <h2>O plugin oficial <code>codex-plugin-cc</code></h2>
+        <div class="tiers">
+          <div class="tier verde"><span class="tname">use</span><h3>Revisão cruzada</h3><p class="muted"><code>/codex:review</code> e <code>/codex:adversarial-review</code> rodam só com leitura.</p></div>
+          <div class="tier amarelo"><span class="tname">com cuidado</span><h3>Delegar tarefas</h3><p class="muted"><code>/codex:rescue</code> escreve no projeto sem pedir aprovação: só em branch ou worktree separado. <code>/codex:transfer</code> envia a sessão inteira para a OpenAI.</p></div>
+          <div class="tier vermelho"><span class="tname">não ligue</span><h3>Review gate</h3><p class="muted">Revisa a cada resposta do Claude; o próprio README avisa que pode virar loop e esgotar os limites.</p></div>
+        </div>
+        <ul class="points">
+          <li>Oficial da OpenAI (Apache-2.0), usa o login local do Codex. Exige Node.js 18.18+ e o Codex CLI.</li>
+          <li>Os hooks de guarda do Claude não valem para o que o Codex escreve: a proteção fica com pre-commit, CI e classificador de risco.</li>
+          <li>Há issues abertas sobre links simbólicos no <code>adversarial-review</code> e sobre encerramento de sessões no Windows. Confira antes de depender do plugin.</li>
+        </ul>
+        <div class="src"><a href="https://github.com/openai/codex-plugin-cc" target="_blank" rel="noopener">↗ openai/codex-plugin-cc</a></div>
+      </div>
+    </section>
+
+    <!-- P4 -->
+    <section class="slide" hidden data-title="Spec Kit + este sistema">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">na prática</span><span>Spec Kit</span></div>
+        <h2>Spec Kit na frente, confiança atrás</h2>
+        <p>O Spec Kit (GitHub) cuida da <b>intenção</b>: ideia, spec, plano e tarefas, com Claude Code e Codex. Este sistema cuida da <b>confiança</b>: prova que o que foi entregue corresponde à spec.</p>
+        <div class="table-wrap">
+          <table class="map wrap">
+            <thead><tr><th>Spec Kit</th><th>Entrega</th><th>O que este sistema acrescenta</th></tr></thead>
+            <tbody>
+              <tr><td><code>constitution</code></td><td>Princípios do projeto</td><td>Cada princípio importante vira regra dura</td></tr>
+              <tr><td><code>specify</code>, <code>clarify</code></td><td>Spec com critérios de aceite</td><td>Zona de risco e plano de verificação com evidências</td></tr>
+              <tr><td><code>plan</code>, <code>analyze</code></td><td>Plano técnico consistente</td><td>Nada</td></tr>
+              <tr><td><code>tasks</code></td><td>Lista de tarefas</td><td>Dono por tarefa, uma de cada vez</td></tr>
+              <tr><td><code>implement</code></td><td>Código</td><td>Verificação, evidências, avaliador, risco e métricas</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">! specs enxutas: o fluxo completo gasta tokens. Use-o em mudanças amarelas e vermelhas; mudança verde e trivial pode ter uma spec de 3 linhas.</p>
+        <div class="src"><a href="https://github.github.io/spec-kit/reference/agentic-sdd.html" target="_blank" rel="noopener">↗ Spec Kit</a><a href="https://www.martinfowler.com/articles/exploring-gen-ai/sdd-3-tools.html" target="_blank" rel="noopener">↗ Böckeler</a></div>
+      </div>
+    </section>
+
+    <!-- P5 -->
+    <section class="slide" hidden data-title="Ambiente de teste com dados">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">na prática</span><span>fluxos com dados</span></div>
+        <h2>O agente precisa ver o que ficou salvo</h2>
+        <div class="cols">
+          <div class="panel good">
+            <span class="label">✓ o agente pode</span>
+            <ul class="points">
+              <li>Consultar o <b>banco de teste</b> com um usuário <b>somente leitura</b>.</li>
+              <li>Ler <b>documentos sintéticos</b> em <code>tests/fixtures/documentos/</code>.</li>
+              <li>Rodar o app contra versões falsas de WhatsApp, CRM, e-mail e do modelo de IA, que registram o que receberam.</li>
+            </ul>
+          </div>
+          <div class="panel bad">
+            <span class="label">✗ o agente nunca</span>
+            <ul class="points">
+              <li>Vê dados ou credenciais de produção.</li>
+              <li>Escreve direto no banco: quem escreve é a aplicação.</li>
+              <li>Acessa a rede além do host do banco de teste (com sandbox).</li>
+            </ul>
+          </div>
+        </div>
+        <div class="file">
+          <div class="fname"><span>usuário somente leitura (PostgreSQL)</span><span>resumo · versão completa na Fase 1.6 do playbook</span></div>
+<pre>CREATE ROLE agente_leitura LOGIN PASSWORD '<span class="s">troque-esta-senha-de-teste</span>';
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO agente_leitura;
+ALTER ROLE agente_leitura SET default_transaction_read_only = on;</pre>
+        </div>
+        <p class="muted">Banco descartável por worktree (Docker Compose ou Testcontainers), com dados sintéticos e zerado a cada rodada.</p>
+      </div>
+    </section>
+
+    <!-- P6 -->
+    <section class="slide" hidden data-title="Testando um fluxo de chatbot">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">na prática</span><span>fluxos com dados</span></div>
+        <h2>Testando um fluxo de chatbot em 4 camadas</h2>
+        <div class="cols">
+          <div class="table-wrap">
+            <table class="map wrap">
+              <thead><tr><th>Camada</th><th>Tokens</th></tr></thead>
+              <tbody>
+                <tr><td><b>Máquina de estados</b> e propriedades: mensagem salva uma vez, reenvio não duplica</td><td class="c0">zero</td></tr>
+                <tr><td><b>Conversas como dados</b>, com respostas gravadas no lugar do modelo, conferindo o banco</td><td class="c0">zero</td></tr>
+                <tr><td><b>Modelo real</b>, com nota de um juiz de outro modelo (taxa de satisfação)</td><td class="c2">alto</td></tr>
+                <tr><td><b>Conversas holdout</b> difíceis, fora do repositório, rodando no CI</td><td class="c0">zero</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="file">
+            <div class="fname"><span>tests/conversas/agendamento.yaml</span><span>relógio congelado</span></div>
+<pre><span class="k">passos:</span>
+  - usuario: <span class="s">"Oi, quero marcar um horário"</span>
+    estado: pedindo_data
+  - usuario: <span class="s">"amanhã às 15h"</span>
+    estado: confirmando
+  - usuario: <span class="s">"sim"</span>
+    estado: concluido
+<span class="k">banco_depois:</span>
+  - sql: <span class="s">"select status from agendamentos …"</span>
+    espera: [{ status: <span class="s">"confirmado"</span> }]</pre>
+          </div>
+        </div>
+        <p class="muted">Evidência no PR: a transcrição da conversa, o antes e depois do banco (sem dados sensíveis) e as notas do juiz, quando houver.</p>
+      </div>
+    </section>
+
+    <!-- P7: mobile -->
+    <section class="slide" hidden data-title="Mobile: React Native + Maestro">
+      <div class="slide-inner">
+        <div class="eyebrow"><span class="tag">na prática</span><span>apps mobile</span></div>
+        <h2>Mobile: o Maestro no lugar do navegador</h2>
+        <div class="cols">
+          <ul class="points">
+            <li><b>Aparelho físico pelo USB:</b> se <code>adb devices</code> lista o celular, o Maestro usa. Roda nativo no Windows, com Java 17+.</li>
+            <li><b>Um celular, um agente por vez:</b> o script de verificação pega uma trava antes de usar a tela.</li>
+            <li><b><code>testID</code></b> nos componentes, usado como <code>id:</code> nos fluxos e listado no feature map.</li>
+            <li><b><code>adb reverse</code></b> liga o celular ao Metro e ao backend de teste da sua máquina.</li>
+            <li><b>Hierarquia em texto</b>, pelo MCP do Maestro, gasta menos tokens que screenshots.</li>
+            <li><b>CI sem o seu celular:</b> precisa de emulador no runner ou de aparelhos na nuvem; até lá, roda os testes rápidos.</li>
+            <li><b>Aparelho de teste:</b> o agente vê a tela inteira, inclusive notificações.</li>
+          </ul>
+          <div class="file">
+            <div class="fname"><span>.maestro/aceitacao/login.yaml</span><span>protegido pela guarda</span></div>
+<pre><span class="k">appId:</span> com.seuapp
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: <span class="s">"campo-email"</span>
+- inputText: <span class="s">"teste@exemplo.com"</span>
+- tapOn:
+    id: <span class="s">"botao-entrar"</span>
+- assertVisible: <span class="s">"Olá"</span>
+- takeScreenshot: login-ok</pre>
+          </div>
+        </div>
+        <p class="note">! merge não é publicação: app publicado não volta atrás num comando. Use publicação gradual, flags remotas e monitoramento de crashes; publicar na loja fica com humano.</p>
+        <div class="src"><a href="https://docs.maestro.dev/get-started/supported-platform/android" target="_blank" rel="noopener">↗ Maestro no Android</a><a href="https://docs.maestro.dev/get-started/maestro-mcp" target="_blank" rel="noopener">↗ Maestro MCP</a></div>
+      </div>
+    </section>
+
+    <!-- 17 -->
+    <section class="slide" hidden data-title="Tradução para o Claude Code">
+      <div class="slide-inner">
+        <div class="eyebrow">no seu dia a dia</div>
+        <h2>Tudo isso, no Claude Code</h2>
+        <div class="table-wrap">
+          <table class="map">
+            <thead><tr><th>Ideia</th><th>No Claude Code</th><th>Tipo</th></tr></thead>
+            <tbody>
+              <tr><td>Contenção</td><td>Permissões deny/ask em <code>.claude/settings.json</code>; sandbox (macOS, Linux, WSL2; não no Windows nativo); modo <code>auto</code></td><td class="hard">dura</td></tr>
+              <tr><td>Regras duras</td><td>Lint + hook <code>PostToolUse</code> (o código 2 devolve o erro ao Claude) + CI</td><td class="hard">dura</td></tr>
+              <tr><td>Testes protegidos</td><td>Hook <code>PreToolUse</code> que nega edição de <code>tests/aceitacao/</code></td><td class="hard">dura</td></tr>
+              <tr><td>Verificação</td><td><code>scripts/verificar</code> + skill <code>verificar-app</code> + MCP de navegador</td><td class="hard">prova</td></tr>
+              <tr><td>Feature map</td><td>Arquivo na pasta da skill, citado no <code>CLAUDE.md</code></td><td class="soft">mole</td></tr>
+              <tr><td>Skills</td><td><code>.claude/skills/&lt;nome&gt;/SKILL.md</code></td><td class="soft">mole</td></tr>
+              <tr><td>Regras escritas</td><td><code>CLAUDE.md</code> curto, como mapa</td><td class="soft">mole</td></tr>
+              <tr><td>Avaliador</td><td>Subagente <code>.claude/agents/avaliador.md</code>, de outro modelo</td><td class="soft">julgamento</td></tr>
+              <tr><td>Revisão por agentes</td><td><code>/code-review</code>, <code>/security-review</code>, Code Review gerenciado</td><td class="soft">julgamento</td></tr>
+              <tr><td>Evals</td><td><code>claude -p</code> com <code>--model</code> diferente para o juiz</td><td class="hard">medida</td></tr>
+              <tr><td>Nuvem e manutenção</td><td>Claude Code na web, <code>@claude</code> no GitHub, rotinas com <code>/schedule</code></td><td class="muted">—</td></tr>
+              <tr><td>Dois agentes</td><td><code>AGENTS.md</code> único + plugin <code>codex-plugin-cc</code> (<code>/codex:review</code>)</td><td class="soft">julgamento</td></tr>
+              <tr><td>Orçamento</td><td><code>/usage</code>, <code>/context</code>, <code>/clear</code>; <code>model</code> por subagente</td><td class="muted">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 18 -->
+    <section class="slide" hidden data-title="Para segunda-feira">
+      <div class="slide-inner">
+        <div class="eyebrow">prática</div>
+        <h2>Para começar na segunda-feira</h2>
+        <div class="todo">
+          <label for="todo-1"><input type="checkbox" id="todo-1"><div><b>Uma skill de verificação, com mapa de funcionalidades</b><span>No seu projeto, peça ao Claude Code: "crie a skill .claude/skills/verificar-app que abre o app e confirma uma funcionalidade, com um feature-map.md ao lado".</span></div></label>
+          <label for="todo-2"><input type="checkbox" id="todo-2"><div><b>Um eval para essa skill</b><span>Escreva uma rubrica.md, rode a skill 3 vezes com <code>claude -p</code> e peça a nota a outro modelo.</span></div></label>
+          <label for="todo-3"><input type="checkbox" id="todo-3"><div><b>Uma regra dura tirada das suas últimas 3 correções</b><span>Pegue o que você mais corrige no Claude e transforme em regra de lint com um hook PostToolUse.</span></div></label>
+          <label for="todo-4"><input type="checkbox" id="todo-4"><div><b>Rode a Fase 0 do playbook num projeto pequeno</b><span>Nessa fase o <code>implantar-confianca.md</code> só lê o projeto e devolve o perfil do projeto, o diagnóstico, a linha de base e o mapa de risco.</span></div></label>
+        </div>
+        <p class="muted" style="font-size: var(--t-small)">As marcações ficam salvas só neste navegador.</p>
+        <div class="src"><a href="https://www.youtube.com/watch?v=O0722w0Xby8&amp;t=553s" target="_blank" rel="noopener">▶ resumo 9:13</a></div>
+      </div>
+    </section>
+
+    <!-- 19 -->
+    <section class="slide" hidden data-title="Glossário e discussão">
+      <div class="slide-inner">
+        <div class="eyebrow">revisão</div>
+        <h2>Glossário e perguntas</h2>
+        <dl class="gloss">
+          <div><dt>agente</dt><dd>IA que age sozinha: lê arquivos, roda comandos, escreve código.</dd></div>
+          <div><dt>PR / merge</dt><dd>Pedido de mudança no código / incluir a mudança no principal.</dd></div>
+          <div><dt>skill</dt><dd>Arquivo de instruções que ensina o agente a fazer algo.</dd></div>
+          <div><dt>eval</dt><dd>Teste que mede se o agente faz bem uma tarefa.</dd></div>
+          <div><dt>CI</dt><dd>Verificações automáticas a cada mudança.</dd></div>
+          <div><dt>lint</dt><dd>Ferramenta que barra padrões de código proibidos.</dd></div>
+          <div><dt>trace</dt><dd>Registro de desempenho de um programa.</dd></div>
+          <div><dt>vibe coding</dt><dd>Programar pedindo à IA, sem ler o código com atenção.</dd></div>
+          <div><dt>hook</dt><dd>Comando que o Claude Code roda sozinho em certos momentos, como depois de cada edição.</dd></div>
+          <div><dt>MCP</dt><dd>Jeito padrão de dar novas ferramentas ao Claude, como controlar um navegador.</dd></div>
+          <div><dt>holdout</dt><dd>Cenários de teste guardados longe do agente, para ele não otimizar para eles.</dd></div>
+          <div><dt>teste de mutação</dt><dd>Insere pequenos erros no código e confere se os testes percebem.</dd></div>
+          <div><dt>revisão por exceção</dt><dd>Humanos revisam só o que tem risco alto ou o que as máquinas não garantem.</dd></div>
+          <div><dt>modo sombra</dt><dd>A automação decide, mas um humano ainda revisa tudo para comparar.</dd></div>
+          <div><dt>AGENTS.md</dt><dd>Arquivo de instruções que vários agentes leem, como o Codex; o CLAUDE.md pode importá-lo.</dd></div>
+          <div><dt>Spec Kit</dt><dd>Ferramenta do GitHub para ir de uma ideia a spec, plano e tarefas antes do código.</dd></div>
+          <div><dt>perfil de projeto</dt><dd>Tipo de projeto que define quais fases aplicar e até onde vai a autonomia.</dd></div>
+          <div><dt>Maestro</dt><dd>Ferramenta de testes de interface mobile, com fluxos em YAML; roda em aparelho físico pelo adb.</dd></div>
+        </dl>
+        <ol class="qs">
+          <li>Em que nível da escada de autonomia você está? O que falta para subir um degrau?</li>
+          <li>Que tarefa do seu projeto um agente conseguiria verificar sozinho?</li>
+          <li>Por que um juiz de <b>outro</b> modelo deixa um eval mais confiável?</li>
+          <li>Escalar os agentes primeiro ou construir as regras primeiro? Defenda sua escolha.</li>
+          <li>Quais caminhos do seu projeto seriam vermelhos? O que você aceitaria ver entrar sozinho?</li>
+          <li>Que tarefas você daria ao Codex e quais ao Claude? Como saberia se acertou?</li>
+        </ol>
+        <div class="src">
+          <a href="https://www.youtube.com/watch?v=I_oMJk6barY" target="_blank" rel="noopener">▶ palestra completa (55 min)</a>
+          <a href="https://www.youtube.com/watch?v=O0722w0Xby8" target="_blank" rel="noopener">▶ resumo (9 min)</a>
+          <a href="https://www.youtube.com/watch?v=O_zcc6Xl12g" target="_blank" rel="noopener">▶ AI Engineer (17 min)</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="controls">
+    <button class="btn" id="prev" type="button" aria-label="Slide anterior">←</button>
+    <div class="progress" aria-hidden="true"><span id="bar"></span></div>
+    <span class="hint">← → navegar · I índice</span>
+    <button class="btn primary" id="next" type="button" aria-label="Próximo slide">→</button>
+  </footer>
+</div>
+
+<div class="index" id="index" hidden role="dialog" aria-modal="true" aria-labelledby="index-title">
+  <div class="index-inner">
+    <div class="index-head">
+      <h2 id="index-title" style="font-size: var(--t-h3)">Índice</h2>
+      <button class="btn" id="index-close" type="button">Fechar</button>
+    </div>
+    <ol id="index-list"></ol>
+  </div>
+</div>
+
+<script>
+(function () {
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var counter = document.getElementById('counter');
+  var bar = document.getElementById('bar');
+  var prev = document.getElementById('prev');
+  var next = document.getElementById('next');
+  var index = document.getElementById('index');
+  var list = document.getElementById('index-list');
+  var current = 0;
+
+  function fromHash() {
+    var m = /^#s(\d+)$/.exec(location.hash);
+    if (!m) return 0;
+    var n = parseInt(m[1], 10) - 1;
+    return Math.max(0, Math.min(slides.length - 1, n));
+  }
+
+  function show(n, updateHash) {
+    current = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function (s, k) {
+      var on = k === current;
+      s.hidden = !on;
+      s.classList.toggle('is-current', on);
+      if (on) s.scrollTop = 0;
+    });
+    counter.textContent = (current + 1) + ' / ' + slides.length;
+    bar.style.width = ((current + 1) / slides.length * 100) + '%';
+    prev.disabled = current === 0;
+    next.disabled = current === slides.length - 1;
+    Array.prototype.forEach.call(list.querySelectorAll('button'), function (b, k) {
+      b.setAttribute('aria-current', k === current ? 'true' : 'false');
+    });
+    if (updateHash) {
+      var h = '#s' + (current + 1);
+      if (location.hash !== h) location.hash = h;
+    }
+  }
+
+  slides.forEach(function (s, k) {
+    var li = document.createElement('li');
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'go';
+    b.innerHTML = '<span>' + (k + 1) + '</span>';
+    b.appendChild(document.createTextNode(s.getAttribute('data-title') || ('Slide ' + (k + 1))));
+    b.addEventListener('click', function () { closeIndex(); show(k, true); });
+    li.appendChild(b);
+    list.appendChild(li);
+  });
+
+  function openIndex() { index.hidden = false; var c = list.querySelector('[aria-current="true"]'); (c || document.getElementById('index-close')).focus(); }
+  function closeIndex() { index.hidden = true; document.getElementById('btn-index').focus(); }
+
+  prev.addEventListener('click', function () { show(current - 1, true); });
+  next.addEventListener('click', function () { show(current + 1, true); });
+  document.querySelectorAll('[data-next]').forEach(function (b) { b.addEventListener('click', function () { show(current + 1, true); }); });
+  document.getElementById('btn-index').addEventListener('click', openIndex);
+  document.getElementById('index-close').addEventListener('click', closeIndex);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    if (!index.hidden) { if (e.key === 'Escape') closeIndex(); return; }
+    var t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || (e.key === ' ' && t.tagName !== 'BUTTON')) { e.preventDefault(); show(current + 1, true); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); show(current - 1, true); }
+    else if (e.key === 'Home') { e.preventDefault(); show(0, true); }
+    else if (e.key === 'End') { e.preventDefault(); show(slides.length - 1, true); }
+    else if (e.key === 'i' || e.key === 'I') { e.preventDefault(); openIndex(); }
+  });
+
+  var sx = null, sy = null;
+  var stage = document.getElementById('stage');
+  stage.addEventListener('touchstart', function (e) { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+  stage.addEventListener('touchend', function (e) {
+    if (sx === null) return;
+    var dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) show(current + (dx < 0 ? 1 : -1), true);
+    sx = sy = null;
+  }, { passive: true });
+
+  window.addEventListener('hashchange', function () { var n = fromHash(); if (n !== current) show(n, false); });
+
+  // checklist: salvo só neste navegador
+  document.querySelectorAll('.todo input').forEach(function (box) {
+    try { box.checked = localStorage.getItem('confiar-' + box.id) === '1'; } catch (err) {}
+    box.addEventListener('change', function () {
+      try { localStorage.setItem('confiar-' + box.id, box.checked ? '1' : '0'); } catch (err) {}
+    });
+  });
+
+  show(fromHash(), false);
+})();
+</script>

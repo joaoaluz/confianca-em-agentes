@@ -1,0 +1,52 @@
+{
+  "segredos": [
+    {
+      "nome": "SPRING_DATASOURCE_URL",
+      "para_que": "endereço do banco de teste (não é segredo)",
+      "gerar": "fixo:jdbc:oracle:thin:@localhost:1521/FREEPDB1",
+      "ambientes": ["dev", "teste"]
+    },
+    {
+      "nome": "SPRING_DATASOURCE_USERNAME",
+      "para_que": "usuário da aplicação no banco",
+      "gerar": "fixo:app",
+      "ambientes": ["dev", "teste"]
+    },
+    {
+      "nome": "ORACLE_ADMIN_PASSWORD",
+      "para_que": "senha de SYS/SYSTEM do Oracle de teste (container)",
+      "gerar": "senha:32",
+      "ambientes": ["dev", "teste"]
+    },
+    {
+      "nome": "SPRING_DATASOURCE_PASSWORD",
+      "para_que": "senha do usuário da aplicação no banco",
+      "gerar": "senha:32",
+      "ambientes": ["dev", "teste", "prod"]
+    },
+    {
+      "nome": "APP_JWT_SECRET",
+      "para_que": "assinatura dos tokens JWT com HS256 (mínimo de 256 bits)",
+      "gerar": "base64:32",
+      "ambientes": ["dev", "teste", "prod"]
+    },
+    {
+      "nome": "APP_JWT_CHAVE_PRIVADA",
+      "para_que": "chave privada RS256 em PEM, codificada em Base64 (só se usar RS256)",
+      "gerar": "rsa:2048",
+      "ambientes": ["dev", "teste", "prod"]
+    },
+    {
+      "nome": "APP_CRIPTO_CHAVE",
+      "para_que": "chave AES-256 para cifrar dados sensíveis",
+      "gerar": "base64:32",
+      "ambientes": ["dev", "teste", "prod"]
+    },
+    {
+      "nome": "PAGAMENTOS_API_TOKEN",
+      "para_que": "token da API de pagamentos: pegue no painel do serviço",
+      "gerar": "externo",
+      "ambientes": ["teste", "prod"]
+    }
+  ]
+}
