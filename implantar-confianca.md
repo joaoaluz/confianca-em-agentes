@@ -18,6 +18,9 @@ description: Implanta no projeto atual um sistema para confiar em agentes de có
 >   ele, o que se aplica e até onde vai a autonomia.
 > - **Ferramentas:** o roteiro de instalação fica logo antes da Fase 0. O Claude confere o que você
 >   já tem e só instala alguma coisa com a sua permissão.
+> - **Fundamentos do app:** `fundamentos.md` reúne os erros que o agente mais comete em apps com
+>   usuários, banco e pagamento (concorrência, idempotência, autorização…), com prompts de correção
+>   e uma auditoria que só lê. A Fase 0 roda a auditoria quando o perfil pede.
 >
 > **Aonde isto leva.** Você não para de revisar: você muda **o que** revisa.
 >
@@ -204,7 +207,8 @@ Não edite nada nesta fase.
 4. **Estrutura e fronteiras:** como o código está organizado e quais partes não deveriam importar
    umas às outras (front × servidor, processo principal × renderer, domínio × infraestrutura).
 5. **Armadilhas candidatas:** padrões propensos a erro neste stack (ex.: `useEffect` para buscar
-   dados, `any`, `except:` genérico, `unwrap()`, SQL montado com strings), com contagem.
+   dados, `any`, `except:` genérico, `unwrap()`, SQL montado com strings, `catch` vazio, `fetch`
+   sem timeout, dinheiro em float, chave secreta em variável que vai para o navegador), com contagem.
 6. **Linha de base**, a partir do git e do CI dos últimos ~90 dias. É contra ela que a autonomia
    será medida depois:
    - merges por semana e tamanho típico de PR;
@@ -257,6 +261,10 @@ Os níveis são os da escada de autonomia (`guia-de-construcao.md`, seção 7): 
 
 13. **Ferramentas:** rode o inventário do roteiro de instalação e liste o que falta para o perfil
     escolhido, com a versão do que já existe. Não instale nada nesta fase.
+14. **Fundamentos do app:** se o perfil pede (tabela "Qual fundamento vale para o seu projeto" em
+    `fundamentos.md`), rode o prompt de auditoria de lá. Ele só lê e entrega o `AUDITORIA.md`, que
+    não vai para o git. Traga para este relatório os 5 achados de maior risco. Segredos aparecem só
+    com o nome e o arquivo:linha, nunca com o valor.
 
 **Entregue** um relatório curto com:
 1. Tabela "comando → funciona? → tempo".
@@ -268,6 +276,7 @@ Os níveis são os da escada de autonomia (`guia-de-construcao.md`, seção 7): 
    aplica, o que você propõe pular e o teto de autonomia.
 7. Se houver mais de um agente ou o Spec Kit: a divisão de trabalho proposta e onde cada um entra.
 8. As ferramentas que faltam para o perfil, na ordem do roteiro, com o comando de instalação de cada uma.
+9. Os 5 achados de maior risco da auditoria de fundamentos (item 14) e o fundamento por onde começar.
 
 **Pare aqui** e espere o usuário aprovar ou ajustar.
 
@@ -488,6 +497,11 @@ certa**, não só proibir, porque o hook vai entregá-la ao agente no momento ex
 - Tipos estritos onde o custo for baixo.
 - Se há partes que não podem importar umas às outras, crie a checagem (regra de imports ou teste
   estrutural) e mostre que ela falha num import proibido.
+- Arquivo que mistura tela, regra de negócio e banco: divida com o fundamento 4 de
+  `fundamentos.md` (testes de caracterização primeiro, um commit por passo) e transforme a
+  fronteira nova nesta checagem.
+- Regras duras candidatas vindas dos fundamentos: `catch` vazio, `fetch` direto fora do cliente
+  com timeout, cliente com `service_role` importado em código de front.
 
 ### 2.3 Princípios de ouro
 
@@ -644,6 +658,14 @@ Crie `docs/specs/_modelo.md`:
 ## Zona de risco
 <verde | amarelo | vermelho, pelo mapa de risco>
 
+## Fundamentos (só o que se aplica; ver fundamentos.md)
+- Quem pode ler, criar, alterar e apagar isto?
+- E se a mesma requisição chegar duas vezes? E se duas chegarem juntas?
+- O que o servidor recalcula em vez de confiar no cliente?
+- Qual o limite: por usuário, por página, de tamanho?
+- E se o serviço de fora falhar ou demorar?
+- Muda o banco? Dá para voltar atrás?
+
 ## Plano de verificação
 | Critério | Como será provado | Evidência |
 |---|---|---|
@@ -725,8 +747,9 @@ elimina. A defesa tem que ser mecânica.
    Mutante sobrevivente vira tarefa: "escreva um teste que mate este mutante".
 4. **Testes de propriedade** (fast-check, Hypothesis, proptest…) para lógica pura, parsers,
    cálculos e máquinas de estado: o agente escreve a regra, a biblioteca gera milhares de casos.
-5. **Sinais de trapaça no CI.** Teste apagado, asserção removida, `skip`/`only` adicionado ou
-   cobertura do arquivo alterado em queda sobem o nível de risco do PR (Fase 8).
+5. **Sinais de trapaça no CI.** Teste apagado, asserção removida, `skip`/`only`/`fails` adicionado
+   ou cobertura do arquivo alterado em queda sobem o nível de risco do PR (Fase 8). Marcar um teste
+   como falha conhecida (`it.fails`, com o link do bug) é decisão só do humano.
 6. **Fluxos com estado e dados** (ex.: chatbot), em camadas:
    - **Máquina de estados** do fluxo, desenhada na spec: testes das transições e de propriedades
      (toda mensagem salva exatamente uma vez, reenviar não duplica, nenhum estado sem saída).
@@ -758,6 +781,13 @@ banco_depois:
 7. **Lógica no banco** (ex.: PL/SQL no Oracle). Regras de negócio em packages, procedures ou
    triggers precisam estar versionadas no repositório, com testes (no Oracle, utPLSQL) rodando
    contra o banco de teste no CI. Sem isso, o agente muda o banco sem ninguém verificar.
+8. **Fundamentos viram testes de aceitação.** Em fluxos com dinheiro, permissão ou dado de outro
+   usuário, os testes de integração do fundamento 5 de `fundamentos.md` (rota de verdade, banco de
+   teste de verdade, só o externo simulado) entram em `tests/aceitacao/`:
+   - **repetição:** o mesmo webhook ou clique duas vezes, e uma primeira tentativa que falha;
+   - **concorrência:** 10 a 20 requisições juntas, com o teste mostrado falhando antes da correção;
+   - **acesso indevido:** sempre logado como o usuário, porque `service_role` e o dono das tabelas
+     ignoram o RLS.
 
 **Prova:** (a) a edição de um teste de aceitação existente é bloqueada; (b) um relatório de
 mutação de um arquivo; (c) um cenário holdout rodando no CI ou localmente pelo usuário.
@@ -1000,7 +1030,8 @@ Meta: decidir, por PR, quem precisa olhar o quê. É aqui que deixa de ser neces
 
 ```json
 {
-  "vermelho": ["src/auth/**", "src/pagamentos/**", "migrations/**", ".github/**", "infra/**"],
+  "vermelho": ["src/auth/**", "src/pagamentos/**", "src/**/webhooks/**", "migrations/**",
+               "supabase/migrations/**", "docs/permissoes.md", ".github/**", "infra/**"],
   "amarelo": ["src/api/**", "src/shared/**", "package.json"],
   "limiteLinhasAmarelo": 400,
   "limiteLinhasVermelho": 1000
@@ -1016,6 +1047,7 @@ ou `risco:vermelho`: o **maior** nível que algum sinal disparar.
 |---|---|
 | Arquivo em caminho vermelho; mudança em CI, permissões, segredos ou infra | vermelho |
 | Teste de aceitação alterado ou apagado | vermelho |
+| Policy de RLS, função `SECURITY DEFINER`, rota de webhook ou matriz de permissões alterada | vermelho |
 | Confiança declarada baixa, ou avaliador pediu para escalar | vermelho |
 | Mais linhas que `limiteLinhasVermelho` (sem arquivos gerados e lockfiles) | vermelho (peça para dividir) |
 | Arquivo em caminho amarelo | amarelo |
@@ -1147,3 +1179,4 @@ agentes entre os planos disponíveis.
 - Birgitta Böckeler: [Understanding Spec-Driven-Development](https://www.martinfowler.com/articles/exploring-gen-ai/sdd-3-tools.html)
 - Maestro: [Android e aparelhos físicos](https://docs.maestro.dev/get-started/supported-platform/android), [MCP](https://docs.maestro.dev/get-started/maestro-mcp), [instalação no Windows](https://docs.maestro.dev/getting-started/installing-maestro/windows), [comandos](https://docs.maestro.dev/reference/commands-available)
 - Oracle: [privilégios por schema no 23ai](https://blogs.oracle.com/cloudsecurity/post/schemalevel-privilege-grants-with-database-23c), [Database Free](https://www.oracle.com/database/free/), [imagem gvenzl/oracle-free](https://hub.docker.com/r/gvenzl/oracle-free), [SQLcl MCP Server](https://docs.oracle.com/en/database/oracle/sql-developer-vscode/25.3/sqdnx/sqlcl-mcp-server.html)
+- Fundamentos do app (OWASP, Kleppmann, Stripe, AWS, estudos sobre código gerado por IA): no fim de `fundamentos.md`

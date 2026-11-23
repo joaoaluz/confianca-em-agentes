@@ -69,6 +69,9 @@ Não pule para a próxima sem o sinal.
 Rode a **Fase 0** do `implantar-confianca.md` num projeto de verdade. Ela só lê o projeto e devolve
 o perfil, o diagnóstico e o que falta. A partir daí, siga as fases que o perfil pedir.
 
+Se o projeto tem usuários, banco ou pagamento, a Fase 0 também roda a auditoria de
+`fundamentos.md`. Corrija um fundamento por vez, sempre com o teste falhando antes da correção.
+
 ---
 
 ## Para medir o slop: o SlopCodeBench

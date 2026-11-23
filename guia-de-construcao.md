@@ -229,6 +229,24 @@ No CI, uma checagem garante que toda variável usada pelo Spring está no manife
 segredo tem valor padrão. Cada PR termina com a seção "Configuração": o que é novo, como gerar e
 onde cadastrar. Detalhes na Fase 1.7 do playbook; modelos testados em `modelos/segredos/`.
 
+### 5.11 Fundamentos do app
+
+O resto do sistema garante que o agente fez **o que foi pedido**. Não garante que ele pensou no que
+ninguém pediu: duas requisições juntas, o mesmo webhook duas vezes, o usuário mudando o preço no
+DevTools, o ID de outra pessoa na URL. É aí que mora boa parte das falhas: num estudo de 2026 com
+200 apps "vibe-coded" publicados, 91% tinham pelo menos uma vulnerabilidade, a maioria em controle
+de acesso, injeção e autenticação.
+
+`fundamentos.md` reúne 13 desses erros. Para cada um, traz o sinal de que você tem o problema, um
+prompt de correção e a **regra que fica** (constraint, teste ou lint), porque o próximo agente não
+vai ler o arquivo. Na prática:
+- A Fase 0 roda a auditoria (só leitura) quando o perfil pede.
+- As perguntas dos fundamentos entram no modelo de spec. Regra de segurança que ninguém escreveu, o
+  agente não adivinha.
+- Os testes de repetição, concorrência e acesso indevido viram testes de aceitação protegidos.
+- A correção acontece no banco sempre que possível (constraint, operação atômica): é o "eliminar o
+  problema no design", o primeiro da ordem de preferência.
+
 ---
 
 ## 6. A política de risco na prática
@@ -458,6 +476,11 @@ Os detalhes (fluxo de exemplo, permissões, riscos de código nativo) estão na 
 - **Segredo real passando pelo agente**: no chat, no código ou como valor padrão no `application.yml`.
 - **Aplicar tudo em todo projeto.** Protótipo não precisa de política de risco, e código regulado
   não deve chegar ao merge automático. O perfil da Fase 0 decide.
+- **Confiar no processo e esquecer o conteúdo.** Spec, testes e avaliador garantem o que foi
+  pedido; concorrência, repetição e autorização quase nunca são pedidas. Leve as perguntas de
+  `fundamentos.md` para a spec.
+- **Teste de permissão com a chave de serviço.** `service_role` e o dono das tabelas ignoram o RLS:
+  o teste passa sem testar nada. Teste logado como o usuário.
 
 ---
 
@@ -480,6 +503,7 @@ Os detalhes (fluxo de exemplo, permissões, riscos de código nativo) estão na 
 - [ ] **Dados:** banco de teste descartável, usuário somente leitura, conversas como dados
 - [ ] **Mobile (se houver):** fluxos do Maestro com `testID`, trava do aparelho, publicação gradual nas lojas
 - [ ] **Segredos:** manifesto, `scripts/segredos.ps1`, checagem no CI e seção "Configuração" nos PRs
+- [ ] **Fundamentos:** auditoria feita, correções na ordem de risco, cada uma com a sua regra que fica
 
 ---
 
@@ -504,3 +528,4 @@ Os detalhes (fluxo de exemplo, permissões, riscos de código nativo) estão na 
 - OpenAI: [Codex, preços e limites](https://developers.openai.com/codex/pricing)
 - OpenAI: [codex-plugin-cc](https://github.com/openai/codex-plugin-cc), plugin oficial para usar o Codex dentro do Claude Code
 - Maestro: [Android e aparelhos físicos](https://docs.maestro.dev/get-started/supported-platform/android), [MCP](https://docs.maestro.dev/get-started/maestro-mcp), [instalação no Windows](https://docs.maestro.dev/getting-started/installing-maestro/windows), [comandos](https://docs.maestro.dev/reference/commands-available)
+- [Understanding the (In)Security of Vibe-Coded Applications](https://arxiv.org/abs/2606.23130) (2026); as demais fontes dos fundamentos estão no fim de `fundamentos.md`
